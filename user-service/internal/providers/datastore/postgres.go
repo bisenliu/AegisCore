@@ -7,8 +7,8 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/datastore"
-	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	"github.com/aegiscore/platform/runtime/datastore"
+	platformtracing "github.com/aegiscore/platform/runtime/observability/tracing"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
@@ -19,7 +19,7 @@ type PostgresParams struct {
 	Lifecycle fx.Lifecycle
 	Settings  serviceconfig.ResourceSettings
 	Log       *zap.Logger
-	Trace     *commontracing.Provider
+	Trace     *platformtracing.Provider
 }
 
 // ProvidePostgres 返回按调用方资源名选择配置并创建单个连接池的构造器。

@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/security/password"
-	"github.com/aegiscore/common/testing/fixtures"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	platformauth "github.com/aegiscore/platform/security/auth"
+	"github.com/aegiscore/platform/security/password"
+	"github.com/aegiscore/platform/testing/fixtures"
 	rolebootstrap "github.com/aegiscore/user-service/internal/features/role/application/bootstrap"
 	rolepostgres "github.com/aegiscore/user-service/internal/features/role/infrastructure/postgres"
 	"github.com/aegiscore/user-service/internal/shared/identity"
@@ -178,7 +178,7 @@ func login(t *testing.T, harness *httpFlowHarness, username string, plainPasswor
 	envelope := expectEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK)
 	tokens := decodeData[tokenResponse](t, envelope)
 	require.NotEmpty(t, tokens.AccessToken, "login access token")
-	assert.Equal(t, commonauth.TokenTypeBearer, tokens.TokenType, "login token type")
+	assert.Equal(t, platformauth.TokenTypeBearer, tokens.TokenType, "login token type")
 	assert.Greater(t, tokens.ExpiresIn, int64(0), "login expires_in")
 	return tokens
 }
@@ -192,7 +192,7 @@ func loginPasswordChangeRequired(t *testing.T, harness *httpFlowHarness, usernam
 	envelope := expectEnvelope(t, recorder, http.StatusOK, false, contracterrors.CodePasswordChangeRequired)
 	tokens := decodeData[tokenResponse](t, envelope)
 	require.NotEmpty(t, tokens.AccessToken, "password-change access token")
-	assert.Equal(t, commonauth.TokenTypeBearer, tokens.TokenType, "password-change token type")
+	assert.Equal(t, platformauth.TokenTypeBearer, tokens.TokenType, "password-change token type")
 	assert.Greater(t, tokens.ExpiresIn, int64(0), "password-change expires_in")
 	assert.Empty(t, tokens.RefreshToken, "password-change refresh token")
 	return tokens

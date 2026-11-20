@@ -9,9 +9,9 @@ import (
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	"github.com/aegiscore/platform/runtime/config"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
+	platformtracing "github.com/aegiscore/platform/runtime/observability/tracing"
 )
 
 func TestConfigureGinModeUsesRuntimeConfig(t *testing.T) {
@@ -53,7 +53,7 @@ func TestProviderGraphConfiguresGinModeBeforeEngine(t *testing.T) {
 	var engine *gin.Engine
 	app := fxtest.New(t,
 		fx.Supply(&cfg, zap.NewNop(), ginTestHTTPSettings()),
-		fx.Provide(ConfigureGinMode, commonmetrics.NewMetricsProvider, commontracing.NewTracingProvider, NewGinEngine),
+		fx.Provide(ConfigureGinMode, platformmetrics.NewMetricsProvider, platformtracing.NewTracingProvider, NewGinEngine),
 		fx.Populate(&engine),
 	)
 	app.RequireStart()

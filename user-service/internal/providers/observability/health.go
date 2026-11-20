@@ -8,7 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 
-	commonresources "github.com/aegiscore/common/runtime/resources"
+	platformresources "github.com/aegiscore/platform/runtime/resources"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
@@ -56,7 +56,7 @@ func ProvideHealthChecks(params HealthCheckParams) router.HealthChecks {
 	redisCfg := params.Resources.Redis[resources.NameCacheRedis]
 	redisCfg.ApplyDefaults()
 	checks := []router.HealthChecker{
-		postgresHealthChecker{name: "postgres." + resources.NamePrimaryDB, db: params.PrimaryDB, timeout: commonresources.DefaultPostgresPingTimeout()},
+		postgresHealthChecker{name: "postgres." + resources.NamePrimaryDB, db: params.PrimaryDB, timeout: platformresources.DefaultPostgresPingTimeout()},
 		redisHealthChecker{name: "redis." + resources.NameCacheRedis, client: params.CacheRedis, timeout: redisCfg.Timeout},
 		casbinPolicyHealthChecker{engine: params.CasbinPolicy},
 		watcherHealthChecker{watcher: params.PolicyWatcher, maxStaleness: params.RBAC.PolicyWatcher.MaxStaleness},

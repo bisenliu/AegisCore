@@ -9,7 +9,7 @@
 ```text
 .
   .golangci.yml
-  common/
+  platform/
     go.mod
   tools/
     openapi-convert/
@@ -23,7 +23,7 @@
     GO_LINT_AUTOMATION.md
 ```
 
-根 `.golangci.yml` 统一约束 `common/`、`user-service/`、`tools/openapi-convert/` 和 `tools/nacos-config-seed/`。CI 和本地开发应分别进入四个 Go module 执行；根目录不是单一 Go module，不应把根目录 `golangci-lint run ./...` 作为唯一命令。
+根 `.golangci.yml` 统一约束 `platform/`、`user-service/`、`tools/openapi-convert/` 和 `tools/nacos-config-seed/`。CI 和本地开发应分别进入四个 Go module 执行；根目录不是单一 Go module，不应把根目录 `golangci-lint run ./...` 作为唯一命令。
 
 导入格式由根 `.golangci.yml` 的 `goimports` formatter 检查，`local-prefixes` 只标记仓库模块。Go 1.27 标准库 `uuid` 与其他标准库导入放在同一组；`goimports` 会保留已有导入块中的空行，迁移旧第三方 UUID 导入时需要清理旧分组空行。`Prefix(...)` 属于 GCI 的独立自定义分组语法，本仓库没有额外的导入排序脚本。
 
@@ -33,7 +33,7 @@
 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0
 make lint
-make common-lint
+make platform-lint
 make user-service-lint
 make tools-openapi-convert-lint
 make tools-nacos-config-seed-lint
@@ -42,7 +42,7 @@ make tools-nacos-config-seed-lint
 直接排查时可分别执行：
 
 ```bash
-cd common && golangci-lint run ./...
+cd platform && golangci-lint run ./...
 cd user-service && golangci-lint run ./...
 cd tools/openapi-convert && golangci-lint run ./...
 cd tools/nacos-config-seed && golangci-lint run ./...
@@ -53,7 +53,7 @@ cd tools/nacos-config-seed && golangci-lint run ./...
 `depguard` 按 feature 分层使用通配包规则，不按 `auth`、`user`、`role`、`permission` 逐个展开。规则应镜像 `docs/ARCHITECTURE.md` 和 `openspec/specs/delivery-operations/spec.md` 的分层依赖表：
 
 - `domain` 不得导入 Gin、Ent、Redis、runtime config/logger、response envelope、application ports 或 infrastructure adapter。
-- `application` 不得导入 Gin、Ent、Redis 或 `common/http/binding`。
+- `application` 不得导入 Gin、Ent、Redis 或 `platform/http/binding`。
 - `transport/http` 不得导入 Ent、Redis 或 SQL/pgx package。
 - `infrastructure/*` 不得导入 Gin 或 HTTP response envelope。
 - `integration/*` 不得导入 Gin response、Ent 或 feature persistence adapter。

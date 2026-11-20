@@ -7,8 +7,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
-	commonmw "github.com/aegiscore/common/http/middleware"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	platformmw "github.com/aegiscore/platform/http/middleware"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 )
 
 const (
@@ -42,7 +42,7 @@ type rateLimitObserver struct {
 }
 
 // newRateLimitObserver 创建记录频次超限日志和报警指标的监控组件。
-func newRateLimitObserver(log *zap.Logger, provider *commonmetrics.Provider) (*rateLimitObserver, error) {
+func newRateLimitObserver(log *zap.Logger, provider *platformmetrics.Provider) (*rateLimitObserver, error) {
 	if log == nil {
 		log = zap.NewNop()
 	}
@@ -53,7 +53,7 @@ func newRateLimitObserver(log *zap.Logger, provider *commonmetrics.Provider) (*r
 	observer.events = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: apiRateLimitEventsMetricName,
 		Help: apiRateLimitEventsMetricHelp,
-	}, []string{"scope", commonmetrics.LabelEvent, commonmetrics.LabelReason})
+	}, []string{"scope", platformmetrics.LabelEvent, platformmetrics.LabelReason})
 	if err := provider.Register(observer.events); err != nil {
 		return nil, err
 	}
@@ -61,8 +61,8 @@ func newRateLimitObserver(log *zap.Logger, provider *commonmetrics.Provider) (*r
 }
 
 // options 组装不同业务接口的访问频率限制规则（如登录接口限制更严，查询接口相对宽松），并挂接超限拦截记录。
-func (o *rateLimitObserver) options(scope string, limiter commonmw.RateLimiter, keyFunc commonmw.RateLimitKeyFunc) commonmw.RateLimitOptions {
-	return commonmw.RateLimitOptions{
+func (o *rateLimitObserver) options(scope string, limiter platformmw.RateLimiter, keyFunc platformmw.RateLimitKeyFunc) platformmw.RateLimitOptions {
+	return platformmw.RateLimitOptions{
 		Limiter: limiter,
 		KeyFunc: keyFunc,
 		OnError: func(c *gin.Context, key string, err error) {
@@ -100,13 +100,13 @@ func (o *rateLimitObserver) recordLimited(_ *gin.Context, scope string, key stri
 // rateLimitErrorReason 将频次检查失败的原因归纳为统一标识。
 func rateLimitErrorReason(err error) string {
 	switch {
-	case errors.Is(err, commonmw.ErrRateLimitKeyRequired):
+	case errors.Is(err, platformmw.ErrRateLimitKeyRequired):
 		return rateLimitReasonKeyRequired
-	case errors.Is(err, commonmw.ErrRateLimiterClosed):
+	case errors.Is(err, platformmw.ErrRateLimiterClosed):
 		return rateLimitReasonLimiterClosed
-	case errors.Is(err, commonmw.ErrRateLimitCapacityOverflow):
+	case errors.Is(err, platformmw.ErrRateLimitCapacityOverflow):
 		return rateLimitReasonOverflow
-	case errors.Is(err, commonmw.ErrRateLimitCapacityRejected):
+	case errors.Is(err, platformmw.ErrRateLimitCapacityRejected):
 		return rateLimitReasonRejected
 	default:
 		return rateLimitReasonError

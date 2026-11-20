@@ -9,7 +9,7 @@ import (
 
 	casbinlib "github.com/casbin/casbin/v3"
 
-	commoncasbin "github.com/aegiscore/common/security/casbin"
+	platformcasbin "github.com/aegiscore/platform/security/casbin"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 
@@ -79,7 +79,7 @@ func (e *Engine) Enforce(ctx context.Context, userID uuid.UUID, pathTemplate str
 		return false, nil
 	}
 	for _, roleID := range roleIDs {
-		allowed, err := commoncasbin.Enforce(ctx, enforcer, commoncasbin.Request{Subject: roleSubject(roleID), Object: pathTemplate, Action: method})
+		allowed, err := platformcasbin.Enforce(ctx, enforcer, platformcasbin.Request{Subject: roleSubject(roleID), Object: pathTemplate, Action: method})
 		if err != nil || allowed {
 			return allowed, err
 		}

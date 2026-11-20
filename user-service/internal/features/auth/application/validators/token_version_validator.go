@@ -9,9 +9,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/localcache"
-	"github.com/aegiscore/common/runtime/logger"
-	commonauth "github.com/aegiscore/common/security/auth"
+	"github.com/aegiscore/platform/runtime/localcache"
+	"github.com/aegiscore/platform/runtime/logger"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
@@ -85,7 +85,7 @@ func (v *TokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID
 	if err != nil {
 		return err
 	}
-	return commonauth.ValidateTokenVersion(tokenVersion, currentVersion)
+	return platformauth.ValidateTokenVersion(tokenVersion, currentVersion)
 }
 
 // Current 返回本实例缓存或后端存储中的当前 token version。

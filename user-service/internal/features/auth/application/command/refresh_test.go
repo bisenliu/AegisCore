@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	commonauth "github.com/aegiscore/common/security/auth"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
@@ -35,7 +35,7 @@ func TestAuthUseCaseRefreshRotatesSession(t *testing.T) {
 		}),
 	)
 
-	tokens, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: commonauth.TokenPrefix + "refresh"})
+	tokens, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: platformauth.TokenPrefix + "refresh"})
 	require.NoError(t, err,
 		"Refresh: %v", err)
 	require.False(t, tokens.AccessToken != "access" || tokens.RefreshToken != "refresh-new",
@@ -72,7 +72,7 @@ func TestAuthUseCaseRefreshRotationPassesMaxActiveSessionsPerUser(t *testing.T) 
 func TestAuthUseCaseRefreshRejectsInvalidNormalizedToken(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(false), nil)
 
-	for _, token := range []string{"", " ", commonauth.TokenTypeBearer, commonauth.TokenPrefix} {
+	for _, token := range []string{"", " ", platformauth.TokenTypeBearer, platformauth.TokenPrefix} {
 		_, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: token})
 		require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
 			"token %q err = %v, want authdomain.ErrTokenInvalid", token, err)
@@ -247,7 +247,7 @@ func TestAuthUseCaseRefreshRejectsVersionChange(t *testing.T) {
 	claims := refreshClaims("s-old", 2)
 
 	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, authTestUserID, nil)
-	fixture.sessions.EXPECT().ValidateRefreshSession(gomock.Any(), claims).Return(authdomain.AuthSession{}, int64(0), errors.Join(authdomain.ErrTokenInvalid, commonauth.ErrTokenVersionMismatch))
+	fixture.sessions.EXPECT().ValidateRefreshSession(gomock.Any(), claims).Return(authdomain.AuthSession{}, int64(0), errors.Join(authdomain.ErrTokenInvalid, platformauth.ErrTokenVersionMismatch))
 	metrics.EXPECT().RefreshFailed(gomock.Any(), authapplication.MetricsReasonTokenVersionMismatch)
 	metrics.EXPECT().TokenVersionMismatch(gomock.Any(), authapplication.MetricsSourceRefreshToken)
 

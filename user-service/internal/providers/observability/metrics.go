@@ -9,8 +9,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 
-	"github.com/aegiscore/common/runtime/localcache"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	"github.com/aegiscore/platform/runtime/localcache"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -141,7 +141,7 @@ type RuntimeDependencyMetricsParams struct {
 
 	Resources        serviceconfig.ResourceSettings
 	RBAC             serviceconfig.RBACSettings
-	Metrics          *commonmetrics.Provider
+	Metrics          *platformmetrics.Provider
 	PrimaryDB        *sql.DB                 `name:"primary_db"`
 	CacheRedis       redis.UniversalClient   `name:"cache_redis"`
 	SessionPurgePool authredis.PurgeTaskPool `name:"auth_session_purge_pool"`
@@ -156,7 +156,7 @@ func RegisterRuntimeDependencyMetrics(params RuntimeDependencyMetricsParams) err
 		return nil
 	}
 
-	primaryDBCollector, err := commonmetrics.NewSQLDBCollector(commonmetrics.SQLDBCollectorOptions{
+	primaryDBCollector, err := platformmetrics.NewSQLDBCollector(platformmetrics.SQLDBCollectorOptions{
 		Resource: resources.NamePrimaryDB,
 		DB:       params.PrimaryDB,
 	})
@@ -168,9 +168,9 @@ func RegisterRuntimeDependencyMetrics(params RuntimeDependencyMetricsParams) err
 	}
 
 	redisCfg := params.Resources.Redis[resources.NameCacheRedis]
-	redisCollector, err := commonmetrics.NewRedisPingCollector(commonmetrics.RedisPingCollectorOptions{
+	redisCollector, err := platformmetrics.NewRedisPingCollector(platformmetrics.RedisPingCollectorOptions{
 		Resource:    resources.NameCacheRedis,
-		Pinger:      commonmetrics.NewRedisClientPinger(params.CacheRedis),
+		Pinger:      platformmetrics.NewRedisClientPinger(params.CacheRedis),
 		Timeout:     redisCfg.Timeout,
 		MinInterval: redisMetricsMinProbeInterval,
 	})
@@ -181,7 +181,7 @@ func RegisterRuntimeDependencyMetrics(params RuntimeDependencyMetricsParams) err
 		return err
 	}
 
-	workerpoolCollector, err := commonmetrics.NewWorkerpoolCollector(commonmetrics.WorkerpoolCollectorOptions{
+	workerpoolCollector, err := platformmetrics.NewWorkerpoolCollector(platformmetrics.WorkerpoolCollectorOptions{
 		Pool:   authSessionPurgePoolMetricsName,
 		Source: params.SessionPurgePool,
 	})
@@ -192,7 +192,7 @@ func RegisterRuntimeDependencyMetrics(params RuntimeDependencyMetricsParams) err
 		return err
 	}
 
-	authTokenCacheCollector, err := commonmetrics.NewLocalcacheCollector(commonmetrics.LocalcacheCollectorOptions{
+	authTokenCacheCollector, err := platformmetrics.NewLocalcacheCollector(platformmetrics.LocalcacheCollectorOptions{
 		Source: params.AuthTokenCache,
 	})
 	if err != nil {
@@ -202,7 +202,7 @@ func RegisterRuntimeDependencyMetrics(params RuntimeDependencyMetricsParams) err
 		return err
 	}
 
-	rbacRolesCacheCollector, err := commonmetrics.NewLocalcacheCollector(commonmetrics.LocalcacheCollectorOptions{
+	rbacRolesCacheCollector, err := platformmetrics.NewLocalcacheCollector(platformmetrics.LocalcacheCollectorOptions{
 		Source: params.RBACRolesCache,
 	})
 	if err != nil {

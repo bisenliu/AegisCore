@@ -14,11 +14,11 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/logger"
-	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/validation"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	"github.com/aegiscore/platform/runtime/config"
+	"github.com/aegiscore/platform/runtime/logger"
+	platformauth "github.com/aegiscore/platform/security/auth"
+	"github.com/aegiscore/platform/validation"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
@@ -52,7 +52,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	core, logs := observer.New(zap.DebugLevel)
 	log := zap.New(core)
 	authSettings := serviceconfig.AuthSettings{JWT: serviceconfig.JWTConfig{Secret: "secret"}}
-	jwtService := authtokens.NewAccessTokenVerifier(commonauth.NewJWTService(commonauth.JWTConfig{Secret: authSettings.JWT.Secret}), authSettings)
+	jwtService := authtokens.NewAccessTokenVerifier(platformauth.NewJWTService(platformauth.JWTConfig{Secret: authSettings.JWT.Secret}), authSettings)
 	tokenVersions := &routeTokenVersionValidator{version: 1}
 	authorizer := &routeAuthorizer{allowed: true}
 	metricsProvider := newRouteTestMetricsProvider(t, cfg)
@@ -108,7 +108,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			request := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
 			request.Header.Set("Content-Type", "application/json")
 			if tt.path == "/api/v1/auth/force-change-password" {
-				request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+"password-change-token")
+				request.Header.Set(platformauth.AuthorizationHeader, platformauth.TokenPrefix+"password-change-token")
 			}
 			engine.ServeHTTP(recorder, request)
 			require.NotEqual(t, http.StatusUnauthorized, recorder.Code)
@@ -202,7 +202,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query with invalid token returns token invalid", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
-		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+"invalid")
+		request.Header.Set(platformauth.AuthorizationHeader, platformauth.TokenPrefix+"invalid")
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, contracterrors.CodeTokenInvalid)
 	})
@@ -210,7 +210,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query with valid token keeps controller behavior", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
-		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		request.Header.Set(platformauth.AuthorizationHeader, platformauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		authorizer.reset()
 		engine.ServeHTTP(recorder, request)
 		require.Equal(t, http.StatusOK, recorder.Code, "body=%s", recorder.Body.String())
@@ -228,7 +228,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		assert.Equal(t, http.MethodGet, fields["method"])
 		assert.Equal(t, "/api/v1/users/:user_id", fields["path"])
 		assert.Equal(t, int64(http.StatusOK), fields["status"])
-		assert.Equal(t, routeAuthUserID, fields[commonauth.UserIDKey])
+		assert.Equal(t, routeAuthUserID, fields[platformauth.UserIDKey])
 		assert.Contains(t, fields, "latency_ms")
 		assert.Contains(t, fields, "client_ip")
 	})
@@ -236,7 +236,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query denied by rbac returns forbidden before controller", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
-		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		request.Header.Set(platformauth.AuthorizationHeader, platformauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		authorizer.reset()
 		authorizer.allowed = false
 		defer func() { authorizer.allowed = true }()
@@ -248,7 +248,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query with mismatched token version returns token invalid", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
-		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthTokenWithVersion(t, "secret", routeAuthUserID, 2))
+		request.Header.Set(platformauth.AuthorizationHeader, platformauth.TokenPrefix+signRouteAuthTokenWithVersion(t, "secret", routeAuthUserID, 2))
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, contracterrors.CodeTokenInvalid)
 	})
@@ -256,7 +256,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query not found returns route envelope", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthNotFoundUserID, nil)
-		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		request.Header.Set(platformauth.AuthorizationHeader, platformauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		engine.ServeHTTP(recorder, request)
 		assertFailureEnvelope(t, recorder, http.StatusNotFound, contracterrors.CodeNotFound)
 	})
@@ -264,7 +264,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query forbidden returns route envelope", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthForbiddenUserID, nil)
-		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		request.Header.Set(platformauth.AuthorizationHeader, platformauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		engine.ServeHTTP(recorder, request)
 		assertFailureEnvelope(t, recorder, http.StatusForbidden, contracterrors.CodeForbidden)
 	})
@@ -272,7 +272,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query internal error returns route envelope", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthInternalErrorUserID, nil)
-		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		request.Header.Set(platformauth.AuthorizationHeader, platformauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		engine.ServeHTTP(recorder, request)
 		assertFailureEnvelope(t, recorder, http.StatusInternalServerError, contracterrors.CodeInternalError)
 	})
@@ -296,7 +296,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query validation still runs after auth", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/abc", nil)
-		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		request.Header.Set(platformauth.AuthorizationHeader, platformauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		engine.ServeHTTP(recorder, request)
 		require.Equal(t, http.StatusBadRequest, recorder.Code)
 	})

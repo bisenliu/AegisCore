@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 
-	commonmiddleware "github.com/aegiscore/common/http/middleware"
-	"github.com/aegiscore/common/runtime/logger"
+	platformmiddleware "github.com/aegiscore/platform/http/middleware"
+	"github.com/aegiscore/platform/runtime/logger"
 )
 
 func TestNewGinEnginePassesThroughRequestID(t *testing.T) {
@@ -30,10 +30,10 @@ func TestNewGinEnginePassesThroughRequestID(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
-	request.Header.Set(commonmiddleware.HeaderRequestID, "client-request-123")
+	request.Header.Set(platformmiddleware.HeaderRequestID, "client-request-123")
 	engine.ServeHTTP(recorder, request)
 
-	require.Equal(t, "client-request-123", recorder.Header().Get(commonmiddleware.HeaderRequestID))
+	require.Equal(t, "client-request-123", recorder.Header().Get(platformmiddleware.HeaderRequestID))
 	require.Equal(t, "client-request-123", requestID)
 }
 
@@ -55,7 +55,7 @@ func TestNewGinEngineGeneratesRequestID(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil))
 
-	responseRequestID := recorder.Header().Get(commonmiddleware.HeaderRequestID)
+	responseRequestID := recorder.Header().Get(platformmiddleware.HeaderRequestID)
 	require.NotEmpty(t, responseRequestID)
 	require.Equal(t, responseRequestID, requestID)
 }
@@ -80,10 +80,10 @@ func TestNewGinEngineKeepsTraceparentAndRequestID(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
 	request.Header.Set("traceparent", "00-00112233445566778899aabbccddeeff-0102030405060708-01")
-	request.Header.Set(commonmiddleware.HeaderRequestID, "client-request-123")
+	request.Header.Set(platformmiddleware.HeaderRequestID, "client-request-123")
 	engine.ServeHTTP(recorder, request)
 
 	require.Equal(t, "00112233445566778899aabbccddeeff", spanContext.TraceID().String())
 	require.Equal(t, "client-request-123", requestID)
-	require.Equal(t, "client-request-123", recorder.Header().Get(commonmiddleware.HeaderRequestID))
+	require.Equal(t, "client-request-123", recorder.Header().Get(platformmiddleware.HeaderRequestID))
 }

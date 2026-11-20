@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	commonmw "github.com/aegiscore/common/http/middleware"
-	commonconfig "github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/localcache"
-	commonresources "github.com/aegiscore/common/runtime/resources"
+	platformmw "github.com/aegiscore/platform/http/middleware"
+	platformconfig "github.com/aegiscore/platform/runtime/config"
+	"github.com/aegiscore/platform/runtime/localcache"
+	platformresources "github.com/aegiscore/platform/runtime/resources"
 	serviceresources "github.com/aegiscore/user-service/internal/resources"
 )
 
@@ -51,7 +51,7 @@ const (
 )
 
 var sensitiveConfigPaths = []string{
-	// JWT secret 是 auth feature 私有签名材料，common 只负责执行调用方声明的脱敏路径。
+	// JWT secret 是 auth feature 私有签名材料，platform 只负责执行调用方声明的脱敏路径。
 	"auth.jwt.secret",
 	// Redis/PostgreSQL 具名资源属于 user-service 运行时接线策略，由服务决定哪些字段敏感。
 	"resources.redis.*.password",
@@ -60,13 +60,13 @@ var sensitiveConfigPaths = []string{
 
 // Config 是 user-service 的根配置对象。
 type Config struct {
-	commonconfig.Config `mapstructure:",squash"`
-	Resources           ResourcesConfig    `mapstructure:"resources"`
-	Auth                AuthConfig         `mapstructure:"auth"`
-	RBAC                RBACConfig         `mapstructure:"rbac"`
-	APIRateLimit        APIRateLimitConfig `mapstructure:"api_rate_limit"`
-	HTTP                HTTPConfig         `mapstructure:"http"`
-	Ent                 EntConfig          `mapstructure:"ent"`
+	platformconfig.Config `mapstructure:",squash"`
+	Resources             ResourcesConfig    `mapstructure:"resources"`
+	Auth                  AuthConfig         `mapstructure:"auth"`
+	RBAC                  RBACConfig         `mapstructure:"rbac"`
+	APIRateLimit          APIRateLimitConfig `mapstructure:"api_rate_limit"`
+	HTTP                  HTTPConfig         `mapstructure:"http"`
+	Ent                   EntConfig          `mapstructure:"ent"`
 }
 
 // HTTPConfig 包含 user-service 私有 HTTP 暴露策略。
@@ -113,18 +113,18 @@ func (c CORSConfig) Validate(path string) []error {
 	}
 	var errs []error
 	if len(c.AllowedOrigins) == 0 {
-		errs = append(errs, commonconfig.FieldError(path+".allowed_origins", "must not be empty when cors is enabled"))
+		errs = append(errs, platformconfig.FieldError(path+".allowed_origins", "must not be empty when cors is enabled"))
 	}
 	for _, origin := range c.AllowedOrigins {
 		if origin == "*" && c.AllowCredentials {
-			errs = append(errs, commonconfig.FieldError(path+".allow_credentials", "cannot be true when allowed_origins contains '*'"))
+			errs = append(errs, platformconfig.FieldError(path+".allow_credentials", "cannot be true when allowed_origins contains '*'"))
 		}
 	}
 	return errs
 }
 
 // ToOptions 将配置转换为中间件所需的运行时选项。
-func (c CORSConfig) ToOptions() commonmw.CORSOptions {
+func (c CORSConfig) ToOptions() platformmw.CORSOptions {
 	methods := c.AllowedMethods
 	if len(methods) == 0 {
 		methods = []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions}
@@ -133,7 +133,7 @@ func (c CORSConfig) ToOptions() commonmw.CORSOptions {
 	if len(headers) == 0 {
 		headers = []string{"Authorization", "Content-Type"}
 	}
-	return commonmw.CORSOptions{
+	return platformmw.CORSOptions{
 		AllowedOrigins:   c.AllowedOrigins,
 		AllowedMethods:   methods,
 		AllowedHeaders:   headers,
@@ -145,8 +145,8 @@ func (c CORSConfig) ToOptions() commonmw.CORSOptions {
 
 // ResourcesConfig 包含 user-service 按名称声明的外部运行时资源。
 type ResourcesConfig struct {
-	Redis    commonresources.RedisConfigs    `mapstructure:"redis"`
-	Postgres commonresources.PostgresConfigs `mapstructure:"postgres"`
+	Redis    platformresources.RedisConfigs    `mapstructure:"redis"`
+	Postgres platformresources.PostgresConfigs `mapstructure:"postgres"`
 }
 
 // AuthConfig 包含 user-service 认证 token 与会话校验设置。
@@ -183,10 +183,10 @@ func DefaultPolicyWatcherConfig() PolicyWatcherConfig {
 // Validate 校验 policy watcher 的校准周期和新鲜度预算。
 func (c PolicyWatcherConfig) Validate(path string) []error {
 	var errs []error
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".check_interval", c.CheckInterval)...)
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".max_staleness", c.MaxStaleness)...)
+	errs = append(errs, platformconfig.ValidatePositiveDuration(path+".check_interval", c.CheckInterval)...)
+	errs = append(errs, platformconfig.ValidatePositiveDuration(path+".max_staleness", c.MaxStaleness)...)
 	if c.MaxStaleness > 0 && c.CheckInterval > 0 && c.MaxStaleness <= c.CheckInterval {
-		errs = append(errs, commonconfig.FieldError(path+".max_staleness", "must be > check_interval"))
+		errs = append(errs, platformconfig.FieldError(path+".max_staleness", "must be > check_interval"))
 	}
 	return errs
 }
@@ -215,7 +215,7 @@ func DefaultRateLimitPolicyConfig(ratePerSecond float64, burst int, keyTTL time.
 		RatePerSecond:  ratePerSecond,
 		Burst:          burst,
 		MaxKeys:        maxKeys,
-		CapacityPolicy: string(commonmw.RateLimitCapacityPolicyOverflow),
+		CapacityPolicy: string(platformmw.RateLimitCapacityPolicyOverflow),
 		KeyTTL:         keyTTL,
 	}
 }
@@ -227,22 +227,22 @@ func (c RateLimitPolicyConfig) Validate(path string) []error {
 	}
 	var errs []error
 	if c.RatePerSecond <= 0 {
-		errs = append(errs, commonconfig.FieldError(path+".rate_per_second", "must be > 0 when enabled"))
+		errs = append(errs, platformconfig.FieldError(path+".rate_per_second", "must be > 0 when enabled"))
 	}
 	if c.Burst <= 0 {
-		errs = append(errs, commonconfig.FieldError(path+".burst", "must be > 0 when enabled"))
+		errs = append(errs, platformconfig.FieldError(path+".burst", "must be > 0 when enabled"))
 	}
 	if c.MaxKeys <= 0 {
-		errs = append(errs, commonconfig.FieldError(path+".max_keys", "must be > 0 when enabled"))
+		errs = append(errs, platformconfig.FieldError(path+".max_keys", "must be > 0 when enabled"))
 	}
-	switch commonmw.RateLimitCapacityPolicy(strings.TrimSpace(c.CapacityPolicy)) {
-	case commonmw.RateLimitCapacityPolicyOverflow, commonmw.RateLimitCapacityPolicyReject:
+	switch platformmw.RateLimitCapacityPolicy(strings.TrimSpace(c.CapacityPolicy)) {
+	case platformmw.RateLimitCapacityPolicyOverflow, platformmw.RateLimitCapacityPolicyReject:
 	case "":
-		errs = append(errs, commonconfig.FieldError(path+".capacity_policy", "is required when enabled"))
+		errs = append(errs, platformconfig.FieldError(path+".capacity_policy", "is required when enabled"))
 	default:
-		errs = append(errs, commonconfig.FieldError(path+".capacity_policy", "must be one of overflow or reject when enabled"))
+		errs = append(errs, platformconfig.FieldError(path+".capacity_policy", "must be one of overflow or reject when enabled"))
 	}
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".key_ttl", c.KeyTTL)...)
+	errs = append(errs, platformconfig.ValidatePositiveDuration(path+".key_ttl", c.KeyTTL)...)
 	return errs
 }
 
@@ -277,7 +277,7 @@ func (c FeatureCacheConfig) Validate(path string) []error {
 	if !c.Enabled {
 		return nil
 	}
-	return commonconfig.ValidatePositiveDuration(path+".ttl", c.TTL)
+	return platformconfig.ValidatePositiveDuration(path+".ttl", c.TTL)
 }
 
 // Localcache 将服务私有 feature cache 配置集中映射为通用 localcache 配置。
@@ -330,7 +330,7 @@ type JWTConfig struct {
 }
 
 // RuntimeConfig 返回共享 runtime 配置副本。
-func (c Config) RuntimeConfig() commonconfig.Config {
+func (c Config) RuntimeConfig() platformconfig.Config {
 	return c.Config
 }
 
@@ -344,33 +344,33 @@ func SensitiveConfigPaths() []string {
 // RedactEffectiveSettings 使用 user-service 敏感路径策略返回脱敏副本。
 //
 // 该函数是 user-service 配置渲染边界的唯一入口：服务在这里集中声明自身 secret schema，
-// common/runtime/config 只执行业务中立的路径匹配和深拷贝。
+// platform/runtime/config 只执行业务中立的路径匹配和深拷贝。
 func RedactEffectiveSettings(settings map[string]any) map[string]any {
-	return commonconfig.RedactSettings(settings, sensitiveConfigPaths)
+	return platformconfig.RedactSettings(settings, sensitiveConfigPaths)
 }
 
 // DefaultConfig 返回 user-service 的完整默认配置初值。
 func DefaultConfig() Config {
 	return Config{
-		Config: commonconfig.DefaultConfig(),
+		Config: platformconfig.DefaultConfig(),
 		Resources: ResourcesConfig{
-			Redis: commonresources.RedisConfigs{
+			Redis: platformresources.RedisConfigs{
 				serviceresources.NameCacheRedis: {
-					Mode:    commonresources.RedisModeCluster,
-					Timeout: commonresources.DefaultRedisTimeout,
-					Cluster: commonresources.RedisClusterConfig{
-						MaxRedirects: commonresources.DefaultRedisClusterMaxRedirects,
+					Mode:    platformresources.RedisModeCluster,
+					Timeout: platformresources.DefaultRedisTimeout,
+					Cluster: platformresources.RedisClusterConfig{
+						MaxRedirects: platformresources.DefaultRedisClusterMaxRedirects,
 					},
 				},
 			},
-			Postgres: commonresources.PostgresConfigs{
+			Postgres: platformresources.PostgresConfigs{
 				serviceresources.NamePrimaryDB: {
-					SSLMode: commonresources.DefaultPostgresSSLMode,
-					Pool: commonresources.PostgresPoolConfig{
-						MaxOpenConns:    commonresources.DefaultPostgresMaxOpenConns,
-						MaxIdleConns:    commonresources.DefaultPostgresMaxIdleConns,
-						ConnMaxLifetime: commonresources.DefaultPostgresConnMaxLifetime,
-						ConnMaxIdleTime: commonresources.DefaultPostgresConnMaxIdleTime,
+					SSLMode: platformresources.DefaultPostgresSSLMode,
+					Pool: platformresources.PostgresPoolConfig{
+						MaxOpenConns:    platformresources.DefaultPostgresMaxOpenConns,
+						MaxIdleConns:    platformresources.DefaultPostgresMaxIdleConns,
+						ConnMaxLifetime: platformresources.DefaultPostgresConnMaxLifetime,
+						ConnMaxIdleTime: platformresources.DefaultPostgresConnMaxIdleTime,
 					},
 				},
 			},
@@ -430,7 +430,7 @@ func hasRawNamedResource(settings map[string]any, resourceType string, name stri
 }
 
 // Validate 在 user-service 启动前拒绝结构非法的服务配置。
-// 先复用 common runtime 校验，再追加 user-service 认证约束；返回聚合错误，便于一次性展示所有字段问题。
+// 先复用 platform runtime 校验，再追加 user-service 认证约束；返回聚合错误，便于一次性展示所有字段问题。
 func (c Config) Validate() error {
 	var errs []error
 	if err := c.Config.Validate(); err != nil {
@@ -443,10 +443,10 @@ func (c Config) Validate() error {
 		errs = append(errs, err)
 	}
 	if _, ok := c.Resources.Redis[serviceresources.NameCacheRedis]; !ok {
-		errs = append(errs, commonconfig.FieldError("resources.redis."+serviceresources.NameCacheRedis, "is required"))
+		errs = append(errs, platformconfig.FieldError("resources.redis."+serviceresources.NameCacheRedis, "is required"))
 	}
 	if _, ok := c.Resources.Postgres[serviceresources.NamePrimaryDB]; !ok {
-		errs = append(errs, commonconfig.FieldError("resources.postgres."+serviceresources.NamePrimaryDB, "is required"))
+		errs = append(errs, platformconfig.FieldError("resources.postgres."+serviceresources.NamePrimaryDB, "is required"))
 	}
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.RBAC.UserRoleCache.Validate("rbac.user_role_cache")...)
@@ -454,13 +454,13 @@ func (c Config) Validate() error {
 	errs = append(errs, c.APIRateLimit.Anonymous.Validate("api_rate_limit.anonymous")...)
 	errs = append(errs, c.APIRateLimit.Authenticated.Validate("api_rate_limit.authenticated")...)
 	if c.HTTP.RequestBodyMaxBytes <= 0 {
-		errs = append(errs, commonconfig.FieldError("http.request_body_max_bytes", "must be > 0"))
+		errs = append(errs, platformconfig.FieldError("http.request_body_max_bytes", "must be > 0"))
 	}
 	errs = append(errs, c.HTTP.CORS.Validate("http.cors")...)
 	if len(errs) == 0 {
 		return nil
 	}
-	return commonconfig.NewValidationError(errs)
+	return platformconfig.NewValidationError(errs)
 }
 
 // validateAuth 校验 user-service auth 私有配置，包括 JWT secret、TTL 和会话上限。
@@ -469,17 +469,17 @@ func (c Config) validateAuth() []error {
 	var errs []error
 	secret := strings.TrimSpace(c.Auth.JWT.Secret)
 	if secret == "" {
-		errs = append(errs, commonconfig.FieldError("auth.jwt.secret", "is required"))
+		errs = append(errs, platformconfig.FieldError("auth.jwt.secret", "is required"))
 	} else if c.isProductionLike() {
 		if isInsecureJWTSecret(strings.ToLower(secret)) {
-			errs = append(errs, commonconfig.FieldError("auth.jwt.secret", "must not use a development default in production-like environments"))
+			errs = append(errs, platformconfig.FieldError("auth.jwt.secret", "must not use a development default in production-like environments"))
 		} else if len([]byte(secret)) < minProductionJWTBytes {
-			errs = append(errs, commonconfig.FieldError("auth.jwt.secret", "must be at least 32 bytes in production-like environments"))
+			errs = append(errs, platformconfig.FieldError("auth.jwt.secret", "must be at least 32 bytes in production-like environments"))
 		}
 	}
-	errs = append(errs, commonconfig.ValidatePositiveDuration("auth.jwt.access_token_ttl", c.Auth.JWT.AccessTokenTTL)...)
-	errs = append(errs, commonconfig.ValidatePositiveDuration("auth.jwt.refresh_token_ttl", c.Auth.JWT.RefreshTokenTTL)...)
-	errs = append(errs, commonconfig.ValidateNonNegativeInt("auth.max_active_sessions_per_user", c.Auth.MaxActiveSessionsPerUser)...)
+	errs = append(errs, platformconfig.ValidatePositiveDuration("auth.jwt.access_token_ttl", c.Auth.JWT.AccessTokenTTL)...)
+	errs = append(errs, platformconfig.ValidatePositiveDuration("auth.jwt.refresh_token_ttl", c.Auth.JWT.RefreshTokenTTL)...)
+	errs = append(errs, platformconfig.ValidateNonNegativeInt("auth.max_active_sessions_per_user", c.Auth.MaxActiveSessionsPerUser)...)
 	errs = append(errs, c.Auth.TokenVersionCache.Validate("auth.token_version_cache")...)
 	return errs
 }

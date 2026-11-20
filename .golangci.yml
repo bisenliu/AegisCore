@@ -1,6 +1,6 @@
 version: "2"
 
-# 从 common/、user-service/ 和两个 tools/* 模块目录分别运行；根目录不是单一 Go module。
+# 从 platform/、user-service/ 和两个 tools/* 模块目录分别运行；根目录不是单一 Go module。
 run:
   modules-download-mode: readonly
   tests: true
@@ -28,13 +28,13 @@ linters:
               desc: domain must not depend on Ent persistence
             - pkg: github.com/redis/go-redis/v9
               desc: domain must not depend on Redis clients
-            - pkg: github.com/aegiscore/common/runtime/config
+            - pkg: github.com/aegiscore/platform/runtime/config
               desc: domain must not depend on runtime config
-            - pkg: github.com/aegiscore/common/runtime/logger
+            - pkg: github.com/aegiscore/platform/runtime/logger
               desc: domain must not depend on runtime logger
-            - pkg: github.com/aegiscore/common/contract/response
+            - pkg: github.com/aegiscore/platform/contract/response
               desc: domain must not depend on HTTP response envelopes
-            - pkg: github.com/aegiscore/common/http/response
+            - pkg: github.com/aegiscore/platform/http/response
               desc: domain must not depend on HTTP response helpers
             - pkg: github.com/aegiscore/.+/internal/features/.+/application$
               desc: domain must not depend on application ports
@@ -59,7 +59,7 @@ linters:
               desc: application must not depend on Ent persistence
             - pkg: github.com/redis/go-redis/v9
               desc: application must not depend on Redis clients
-            - pkg: github.com/aegiscore/common/http/binding
+            - pkg: github.com/aegiscore/platform/http/binding
               desc: application must not depend on HTTP binder
             - pkg: github.com/aegiscore/.+/internal/features/.+/transport/
               desc: application must not depend on transport DTO/controller packages
@@ -85,9 +85,9 @@ linters:
           deny:
             - pkg: github.com/gin-gonic/gin
               desc: infrastructure must not depend on Gin transport
-            - pkg: github.com/aegiscore/common/http/response
+            - pkg: github.com/aegiscore/platform/http/response
               desc: infrastructure must not depend on HTTP response helpers
-            - pkg: github.com/aegiscore/common/contract/response
+            - pkg: github.com/aegiscore/platform/contract/response
               desc: infrastructure must not depend on HTTP response envelopes
             - pkg: github.com/aegiscore/.+/internal/features/.+/transport/
               desc: infrastructure must not depend on transport DTO/controller packages
@@ -98,9 +98,9 @@ linters:
           deny:
             - pkg: github.com/gin-gonic/gin
               desc: integration adapters must not depend on Gin transport
-            - pkg: github.com/aegiscore/common/http/response
+            - pkg: github.com/aegiscore/platform/http/response
               desc: integration adapters must not depend on HTTP response helpers
-            - pkg: github.com/aegiscore/common/contract/response
+            - pkg: github.com/aegiscore/platform/contract/response
               desc: integration adapters must not depend on HTTP response envelopes
             - pkg: github.com/aegiscore/.+/internal/persistence/ent$
               desc: integration adapters must not depend on Ent persistence
@@ -141,15 +141,15 @@ linters:
               desc: shared packages must not depend on PostgreSQL driver packages
             - pkg: go.uber.org/fx
               desc: shared packages must not depend on Fx DI
-            - pkg: github.com/aegiscore/common/http/response
+            - pkg: github.com/aegiscore/platform/http/response
               desc: shared packages must not depend on HTTP response helpers
-            - pkg: github.com/aegiscore/common/contract/response
+            - pkg: github.com/aegiscore/platform/contract/response
               desc: shared packages must not depend on HTTP response envelopes
-            - pkg: github.com/aegiscore/common/runtime/config
+            - pkg: github.com/aegiscore/platform/runtime/config
               desc: shared packages must not depend on runtime config
-            - pkg: github.com/aegiscore/common/runtime/logger
+            - pkg: github.com/aegiscore/platform/runtime/logger
               desc: shared packages must not depend on runtime logger
-            - pkg: github.com/aegiscore/common/runtime/datastore
+            - pkg: github.com/aegiscore/platform/runtime/datastore
               desc: shared packages must not depend on runtime datastore
         service-composition-boundary:
           files:

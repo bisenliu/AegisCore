@@ -9,10 +9,10 @@ import (
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
-	"github.com/aegiscore/common/validation"
+	"github.com/aegiscore/platform/runtime/config"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
+	platformtracing "github.com/aegiscore/platform/runtime/observability/tracing"
+	"github.com/aegiscore/platform/validation"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authfeature "github.com/aegiscore/user-service/internal/features/auth"
 	permissionfeature "github.com/aegiscore/user-service/internal/features/permission"
@@ -67,13 +67,13 @@ func TestSharedObservabilityProvidersStartFromServiceRuntimeConfig(t *testing.T)
 	type observabilityProviders struct {
 		fx.In
 
-		Metrics *commonmetrics.Provider
-		Tracing *commontracing.Provider
+		Metrics *platformmetrics.Provider
+		Tracing *platformtracing.Provider
 	}
 	var got observabilityProviders
 	app := fxtest.New(t,
 		fx.Supply(serviceconfig.NewRuntimeConfig(serviceCfg)),
-		fx.Provide(commonmetrics.NewMetricsProvider, commontracing.NewTracingProvider),
+		fx.Provide(platformmetrics.NewMetricsProvider, platformtracing.NewTracingProvider),
 		fx.Populate(&got),
 	)
 	app.RequireStart()

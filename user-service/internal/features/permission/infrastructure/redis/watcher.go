@@ -9,8 +9,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/logger"
-	"github.com/aegiscore/common/runtime/redispubsub"
+	"github.com/aegiscore/platform/runtime/logger"
+	"github.com/aegiscore/platform/runtime/redispubsub"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 

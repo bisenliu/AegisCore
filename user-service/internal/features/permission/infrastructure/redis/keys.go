@@ -1,6 +1,6 @@
 package redis
 
-import "github.com/aegiscore/common/runtime/rediskey"
+import "github.com/aegiscore/platform/runtime/rediskey"
 
 // KeyCatalog 构造权限 RBAC Redis adapter 私有 key 和 channel。
 //

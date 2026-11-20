@@ -10,9 +10,9 @@ import (
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"go.uber.org/zap"
 
-	runtimeid "github.com/aegiscore/common/runtime/id"
-	"github.com/aegiscore/common/runtime/logger"
-	commonauth "github.com/aegiscore/common/security/auth"
+	runtimeid "github.com/aegiscore/platform/runtime/id"
+	"github.com/aegiscore/platform/runtime/logger"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
@@ -65,7 +65,7 @@ type IssuedTokenPair struct {
 }
 
 type authTokenIssuer struct {
-	verifier *commonauth.JWTService
+	verifier *platformauth.JWTService
 	config   serviceconfig.JWTConfig
 }
 
@@ -77,12 +77,12 @@ type signInput struct {
 }
 
 // NewIssuer 构造 token 签发解析组件。
-func NewIssuer(verifier *commonauth.JWTService, settings serviceconfig.AuthSettings) Issuer {
+func NewIssuer(verifier *platformauth.JWTService, settings serviceconfig.AuthSettings) Issuer {
 	return &authTokenIssuer{verifier: verifier, config: settings.JWT}
 }
 
 // NewAccessTokenVerifier 构造受保护 HTTP 路由使用的 access token verifier。
-func NewAccessTokenVerifier(verifier *commonauth.JWTService, settings serviceconfig.AuthSettings) commonauth.AccessTokenVerifier {
+func NewAccessTokenVerifier(verifier *platformauth.JWTService, settings serviceconfig.AuthSettings) platformauth.AccessTokenVerifier {
 	return &authTokenIssuer{verifier: verifier, config: settings.JWT}
 }
 
@@ -101,7 +101,7 @@ func (i *authTokenIssuer) IssueTokenPair(ctx context.Context, userID uuid.UUID, 
 		return nil, fmt.Errorf("sign refresh token: %w", err)
 	}
 	return &IssuedTokenPair{
-		Result:     &TokenResult{AccessToken: access, RefreshToken: refresh, TokenType: commonauth.TokenTypeBearer, ExpiresIn: int64(accessTTL.Seconds())},
+		Result:     &TokenResult{AccessToken: access, RefreshToken: refresh, TokenType: platformauth.TokenTypeBearer, ExpiresIn: int64(accessTTL.Seconds())},
 		RefreshTTL: refreshTTL,
 	}, nil
 }
@@ -114,7 +114,7 @@ func (i *authTokenIssuer) IssuePasswordChangeToken(ctx context.Context, userID u
 		logger.Error(ctx, "sign password change token failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return nil, fmt.Errorf("sign password change token: %w", err)
 	}
-	return &TokenResult{AccessToken: token, TokenType: commonauth.TokenTypeBearer, ExpiresIn: int64(ttl.Seconds())}, nil
+	return &TokenResult{AccessToken: token, TokenType: platformauth.TokenTypeBearer, ExpiresIn: int64(ttl.Seconds())}, nil
 }
 
 // passwordChangeTokenTTL 返回强制改密临时凭证的有效时长（通常较短），该凭证无法用于访问普通业务接口。
@@ -129,7 +129,7 @@ func (i *authTokenIssuer) passwordChangeTokenTTL() time.Duration {
 
 // ParseRefreshToken 规范化可选 Bearer 输入并校验 refresh token claims。
 func (i *authTokenIssuer) ParseRefreshToken(ctx context.Context, token string) (*Claims, uuid.UUID, error) {
-	claims, err := i.parse(commonauth.StripBearerPrefix(token), SubjectRefresh, false)
+	claims, err := i.parse(platformauth.StripBearerPrefix(token), SubjectRefresh, false)
 	if err != nil {
 		logger.Warn(ctx, "refresh token invalid", zap.Bool("token_present", token != ""))
 		return nil, uuid.Nil(), authdomain.ErrTokenInvalid
@@ -139,7 +139,7 @@ func (i *authTokenIssuer) ParseRefreshToken(ctx context.Context, token string) (
 
 // ParsePasswordChangeToken 规范化可选 Bearer 输入，并返回已校验的改密 claims。
 func (i *authTokenIssuer) ParsePasswordChangeToken(ctx context.Context, token string) (*Claims, uuid.UUID, error) {
-	claims, err := i.parse(commonauth.StripBearerPrefix(token), SubjectPasswordChange, true)
+	claims, err := i.parse(platformauth.StripBearerPrefix(token), SubjectPasswordChange, true)
 	if err != nil {
 		logger.Warn(ctx, "password change token invalid", zap.Bool("token_present", token != ""))
 		return nil, uuid.Nil(), authdomain.ErrTokenInvalid
@@ -148,12 +148,12 @@ func (i *authTokenIssuer) ParsePasswordChangeToken(ctx context.Context, token st
 }
 
 // VerifyAccessToken 校验访问令牌的签名、标准 claims、会话标识和 subject，并返回中间件所需的最小认证信息。
-func (i *authTokenIssuer) VerifyAccessToken(tokenString string) (commonauth.AccessToken, error) {
+func (i *authTokenIssuer) VerifyAccessToken(tokenString string) (platformauth.AccessToken, error) {
 	claims, err := i.parse(tokenString, SubjectAccess, true)
 	if err != nil {
-		return commonauth.AccessToken{}, err
+		return platformauth.AccessToken{}, err
 	}
-	return commonauth.AccessToken{UserID: claims.UserID.String(), SessionID: claims.SessionID, TokenVersion: claims.TokenVersion}, nil
+	return platformauth.AccessToken{UserID: claims.UserID.String(), SessionID: claims.SessionID, TokenVersion: claims.TokenVersion}, nil
 }
 
 // parse 解析并校验加密通行证文本，提取其中包含的用户信息和有效期。
@@ -186,7 +186,7 @@ func (i *authTokenIssuer) parse(tokenString string, subject string, requireSessi
 // sign 使用系统密钥对通行证信息进行防伪签名；签名失败则本次登录不能继续。
 func (i *authTokenIssuer) sign(input signInput, subject string) (string, error) {
 	if i.config.Secret == "" {
-		return "", commonauth.ErrMissingSecret
+		return "", platformauth.ErrMissingSecret
 	}
 	if input.UserID == uuid.Nil() {
 		return "", errMissingUserID

@@ -25,11 +25,11 @@
 
 ### Requirement: 质量门禁、架构诊断与可复现生成
 
-系统 MUST 提供模块级和仓库级测试、lint、架构检查、生成和完整 verify 入口。测试与生成 MUST 可诊断、可复现且不得扩张正式生产 API。`common`、`user-service`、`tools/openapi-convert` 和 `tools/nacos-config-seed` 四个 Go module MUST 进入仓库级 lint、`govulncheck` 和 `gosec` 门禁，并在完整仓库 checkout 中保持可独立校验的 module metadata。`user-service-architecture-lint` MUST 保护正式架构来源声明的边界；Fx 依赖图诊断 MUST 无外部及运行时激活副作用。OpenAPI 转换库、CLI 和服务脚本 MUST 分别由 `common/http/openapi`、`tools/openapi-convert` 和 user-service 拥有其通用逻辑、可执行入口与服务参数。GitHub Actions MUST 由主 CI workflow 唯一拥有 PR 与主线 push 的标准质量触发，并通过仅支持 `workflow_call` 的复用 workflow 为同一 commit 各执行一次 lint 和普通单测。
+系统 MUST 提供模块级和仓库级测试、lint、架构检查、生成和完整 verify 入口。测试与生成 MUST 可诊断、可复现且不得扩张正式生产 API。`platform`、`user-service`、`tools/openapi-convert` 和 `tools/nacos-config-seed` 四个 Go module MUST 进入仓库级 lint、`govulncheck` 和 `gosec` 门禁，并在完整仓库 checkout 中保持可独立校验的 module metadata。`user-service-architecture-lint` MUST 保护正式架构来源声明的边界；Fx 依赖图诊断 MUST 无外部及运行时激活副作用。OpenAPI 转换库、CLI 和服务脚本 MUST 分别由 `platform/http/openapi`、`tools/openapi-convert` 和 user-service 拥有其通用逻辑、可执行入口与服务参数。GitHub Actions MUST 由主 CI workflow 唯一拥有 PR 与主线 push 的标准质量触发，并通过仅支持 `workflow_call` 的复用 workflow 为同一 commit 各执行一次 lint 和普通单测。
 
 #### Scenario: Nacos source adapter 测试与示例门禁
 
-- **WHEN** `common/runtime/config/nacos` package 的 adapter 行为或文件组织变化
+- **WHEN** `platform/runtime/config/nacos` package 的 adapter 行为或文件组织变化
 - **THEN** 验证 MUST 覆盖 Nacos package 普通测试、race 测试、`go vet` 和 examples
 - **AND** 测试 MUST 使用本地 fake loader 或 `httptest.Server` 固化多 dataId 加载、server failover、总 timeout 分配、认证 token 复用、endpoint 拼接、响应体上限和 safe error message 行为
 - **AND** 这些验证 MUST NOT 连接真实 Nacos、启动 Compose、读取部署配置目录、要求 Nacos SDK 或新增动态刷新后台任务
@@ -78,7 +78,7 @@ Ent schema MUST 是数据库结构来源，Atlas SQL migration MUST 是可审查
 
 ### Requirement: 镜像、部署与受控发布
 
-user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go module 解析和分离缓存构建，并以最小非 root 运行时交付同一可验证工件。CI MUST 运行覆盖 common 与 user-service 的真实依赖测试。Docker、Compose、Helm 渲染的 Kubernetes 清单和观测资产 MUST 使用一致的 runtime config、release 工件、安全上下文、探针、Secret、资源和网络边界，MUST NOT 包含真实 secret 或自动 migration apply。仓库 MUST NOT 再维护与 Helm chart 平行的手写 Kubernetes YAML。外部服务标识与镜像名 MUST 使用 `aegiscore-user-service`，容器、二进制和本地目录语义 MUST 使用 `user-service`，MUST NOT 保留旧复数命名。
+user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go module 解析和分离缓存构建，并以最小非 root 运行时交付同一可验证工件。CI MUST 运行覆盖 platform 与 user-service 的真实依赖测试。Docker、Compose、Helm 渲染的 Kubernetes 清单和观测资产 MUST 使用一致的 runtime config、release 工件、安全上下文、探针、Secret、资源和网络边界，MUST NOT 包含真实 secret 或自动 migration apply。仓库 MUST NOT 再维护与 Helm chart 平行的手写 Kubernetes YAML。外部服务标识与镜像名 MUST 使用 `aegiscore-user-service`，容器、二进制和本地目录语义 MUST 使用 `user-service`，MUST NOT 保留旧复数命名。
 
 #### Scenario: 发布顺序与兼容边界
 
@@ -170,7 +170,7 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 #### Scenario: 仓库与 CI 使用一致版本
 
 - **WHEN** 执行仓库架构检查或 CI 构建
-- **THEN** `go.work`、`common`、`user-service`、`tools/openapi-convert`、`tools/nacos-config-seed`、CI workflow 和 Docker builder MUST 指向 Go 1.27.4
+- **THEN** `go.work`、`platform`、`user-service`、`tools/openapi-convert`、`tools/nacos-config-seed`、CI workflow 和 Docker builder MUST 指向 Go 1.27.4
 - **AND** 架构版本检查及其 fixture MUST 覆盖全部四个 module，并能发现版本不一致
 
 #### Scenario: UUID 持久化结构不漂移
@@ -328,7 +328,7 @@ user-service Helm 生产发布 MUST 使用不可变镜像引用。Deployment、R
 #### Scenario: 枚举校验 helper 保持 schema 内部归属
 
 - **WHEN** 字符串枚举校验逻辑从单个 Ent schema 文件提取为共享 helper
-- **THEN** helper MUST 留在 `user-service/internal/persistence/ent/schema` 包内，并 MUST NOT 放入 `common/`、`user-service/internal/shared` 或 feature 包
+- **THEN** helper MUST 留在 `user-service/internal/persistence/ent/schema` 包内，并 MUST NOT 放入 `platform/`、`user-service/internal/shared` 或 feature 包
 - **AND** 使用该 helper 的 schema MUST 保持原有允许值集合和校验失败语义
 
 #### Scenario: 生成与 migration 校验无非预期漂移
@@ -375,7 +375,7 @@ user-service Helm 生产发布 MUST 使用不可变镜像引用。Deployment、R
 
 ### Requirement: 无 Git 工作区验证
 
-验证脚本 MUST 从自身路径定位项目，不依赖 Git 获取根目录。缺少 GitHub workflow 时 Actions 固定版本检查 MUST 明确跳过；存在 workflow 时 MUST 拒绝未固定 commit SHA 的外部 Action。根目录、common 和 user-service 的验证入口、Fx 图检查及架构检查 MUST 在项目根目录缺少 .git 时跳过依赖 Git 的生成物差异检查并明确说明；其余检查 MUST 继续执行。存在 .git 时 MUST 保留原差异门禁，MUST NOT 误用上级目录的仓库。根目录 coverage 报告 MUST 被 Git 忽略。
+验证脚本 MUST 从自身路径定位项目，不依赖 Git 获取根目录。缺少 GitHub workflow 时 Actions 固定版本检查 MUST 明确跳过；存在 workflow 时 MUST 拒绝未固定 commit SHA 的外部 Action。根目录、platform 和 user-service 的验证入口、Fx 图检查及架构检查 MUST 在项目根目录缺少 .git 时跳过依赖 Git 的生成物差异检查并明确说明；其余检查 MUST 继续执行。存在 .git 时 MUST 保留原差异门禁，MUST NOT 误用上级目录的仓库。根目录 coverage 报告 MUST 被 Git 忽略。
 
 #### Scenario: 更名后尚未初始化新仓库
 

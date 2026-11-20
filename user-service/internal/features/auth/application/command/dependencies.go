@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"uuid"
 
-	runtimeid "github.com/aegiscore/common/runtime/id"
+	runtimeid "github.com/aegiscore/platform/runtime/id"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"

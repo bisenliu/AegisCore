@@ -3,7 +3,7 @@ package permission
 import (
 	"github.com/prometheus/client_golang/prometheus"
 
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 	permissioncasbin "github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin"
 )
 
@@ -24,7 +24,7 @@ type casbinPolicyReloadMetrics struct {
 }
 
 // newCasbinPolicyReloadMetrics 创建用于统计权限规则加载成功率的监控指标。
-func newCasbinPolicyReloadMetrics(provider *commonmetrics.Provider) permissioncasbin.ReloadMetrics {
+func newCasbinPolicyReloadMetrics(provider *platformmetrics.Provider) permissioncasbin.ReloadMetrics {
 	if provider == nil || !provider.Enabled() {
 		return permissioncasbin.NopReloadMetrics()
 	}
@@ -32,7 +32,7 @@ func newCasbinPolicyReloadMetrics(provider *commonmetrics.Provider) permissionca
 		reloads: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: casbinReloadsMetricName,
 			Help: casbinReloadsMetricHelp,
-		}, []string{commonmetrics.LabelStatus}),
+		}, []string{platformmetrics.LabelStatus}),
 		lastStatus: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: casbinReloadLastMetricName,
 			Help: casbinReloadLastMetricHelp,
@@ -45,12 +45,12 @@ func newCasbinPolicyReloadMetrics(provider *commonmetrics.Provider) permissionca
 
 // ReloadSucceeded 记录权限规则加载成功的次数。
 func (m *casbinPolicyReloadMetrics) ReloadSucceeded() {
-	m.reloads.WithLabelValues(commonmetrics.StatusSuccess).Inc()
+	m.reloads.WithLabelValues(platformmetrics.StatusSuccess).Inc()
 }
 
 // ReloadFailed 记录权限规则加载失败的次数。
 func (m *casbinPolicyReloadMetrics) ReloadFailed() {
-	m.reloads.WithLabelValues(commonmetrics.StatusFailure).Inc()
+	m.reloads.WithLabelValues(platformmetrics.StatusFailure).Inc()
 }
 
 // SetLastStatus 更新最近一次权限加载状态是正常还是异常。

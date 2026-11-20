@@ -7,18 +7,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	commonconfig "github.com/aegiscore/common/runtime/config"
-	commonnacos "github.com/aegiscore/common/runtime/config/nacos"
+	platformconfig "github.com/aegiscore/platform/runtime/config"
+	platformnacos "github.com/aegiscore/platform/runtime/config/nacos"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	configtestkit "github.com/aegiscore/user-service/internal/config/testkit"
 )
 
 func setTestNacosEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv(commonnacos.EnvService, "user-service")
-	t.Setenv(commonnacos.EnvAddr, "127.0.0.1:8848")
-	t.Setenv(commonnacos.EnvNamespace, "test")
-	t.Setenv(commonnacos.EnvGroup, "AEGISCORE")
+	t.Setenv(platformnacos.EnvService, "user-service")
+	t.Setenv(platformnacos.EnvAddr, "127.0.0.1:8848")
+	t.Setenv(platformnacos.EnvNamespace, "test")
+	t.Setenv(platformnacos.EnvGroup, "AEGISCORE")
 }
 
 func loadRepositoryConfigForTest(t *testing.T) *serviceconfig.Config {
@@ -39,10 +39,10 @@ func readRepositoryConfigDocuments(t testing.TB) map[string][]byte {
 	return docs
 }
 
-func readRepositoryConfigDocList(t testing.TB) []commonconfig.ConfigDocument {
+func readRepositoryConfigDocList(t testing.TB) []platformconfig.ConfigDocument {
 	t.Helper()
 	docs := readRepositoryConfigDocuments(t)
-	return []commonconfig.ConfigDocument{
+	return []platformconfig.ConfigDocument{
 		{DataID: "base.yaml", Content: docs["base.yaml"]},
 		{DataID: "resources.yaml", Content: docs["resources.yaml"]},
 		{DataID: "user-service.yaml", Content: docs["user-service.yaml"]},

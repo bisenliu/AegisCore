@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx/fxtest"
 
-	commonmw "github.com/aegiscore/common/http/middleware"
+	platformmw "github.com/aegiscore/platform/http/middleware"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
@@ -26,7 +26,7 @@ func TestNewAPIRateLimitersConstructsEnabledLimiters(t *testing.T) {
 	lifecycle.RequireStop()
 
 	allowed, err := limiters.Anonymous.Allow("ip:203.0.113.1")
-	require.ErrorIs(t, err, commonmw.ErrRateLimiterClosed)
+	require.ErrorIs(t, err, platformmw.ErrRateLimiterClosed)
 	require.False(t, allowed)
 }
 
@@ -37,7 +37,7 @@ func TestNewAPIRateLimitersPassesCapacitySettings(t *testing.T) {
 			RatePerSecond:  100,
 			Burst:          100,
 			MaxKeys:        1,
-			CapacityPolicy: string(commonmw.RateLimitCapacityPolicyReject),
+			CapacityPolicy: string(platformmw.RateLimitCapacityPolicyReject),
 			KeyTTL:         time.Minute,
 		},
 	}})
@@ -48,7 +48,7 @@ func TestNewAPIRateLimitersPassesCapacitySettings(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, allowed)
 	allowed, err = limiters.Anonymous.Allow("ip:203.0.113.2")
-	require.ErrorIs(t, err, commonmw.ErrRateLimitCapacityRejected)
+	require.ErrorIs(t, err, platformmw.ErrRateLimitCapacityRejected)
 	require.False(t, allowed)
 }
 

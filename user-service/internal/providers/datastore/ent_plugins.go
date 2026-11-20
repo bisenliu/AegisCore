@@ -6,9 +6,9 @@ import (
 	"entgo.io/ent/dialect"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/logger"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	"github.com/aegiscore/platform/runtime/logger"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
+	platformtracing "github.com/aegiscore/platform/runtime/observability/tracing"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
@@ -33,8 +33,8 @@ type entPluginSet struct {
 func newEntPlugins(
 	settings serviceconfig.EntSettings,
 	log *zap.Logger,
-	metricsProvider *commonmetrics.Provider,
-	tracingProvider *commontracing.Provider,
+	metricsProvider *platformmetrics.Provider,
+	tracingProvider *platformtracing.Provider,
 ) (entPluginSet, error) {
 	plugins := entPluginSet{}
 	if settings.Plugins.SQLLog.Enabled {

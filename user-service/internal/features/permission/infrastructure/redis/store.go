@@ -8,7 +8,7 @@ import (
 	rediscmd "github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/platform/runtime/logger"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 

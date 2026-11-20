@@ -10,9 +10,9 @@ import (
 	rediscache "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/localcache"
-	"github.com/aegiscore/common/runtime/workerpool"
-	commonauth "github.com/aegiscore/common/security/auth"
+	"github.com/aegiscore/platform/runtime/localcache"
+	"github.com/aegiscore/platform/runtime/workerpool"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
@@ -33,7 +33,7 @@ func defaultMaxActiveSessionsPerUser() int {
 	return 5
 }
 
-func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenVersionStore, tokenCache authapplication.TokenVersionCache) commonauth.TokenVersionValidator {
+func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenVersionStore, tokenCache authapplication.TokenVersionCache) platformauth.TokenVersionValidator {
 	t.Helper()
 	cache, err := localcache.NewLoadingCache(localcache.Config{
 		Name:        "auth_token_version_test",

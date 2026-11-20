@@ -18,8 +18,8 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	runtimeconfig "github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/workerpool"
+	runtimeconfig "github.com/aegiscore/platform/runtime/config"
+	"github.com/aegiscore/platform/runtime/workerpool"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )

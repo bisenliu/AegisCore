@@ -10,10 +10,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	contractresponse "github.com/aegiscore/common/contract/response"
-	"github.com/aegiscore/common/runtime/config"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	contractresponse "github.com/aegiscore/platform/contract/response"
+	"github.com/aegiscore/platform/runtime/config"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
@@ -45,9 +45,9 @@ func TestNewGinEngineRejectsOversizedBodyBeforeRouteHandler(t *testing.T) {
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
 	require.Equal(t, contracterrors.CodeRequestBodyTooLarge, envelope.Code)
 	metric := findGinMetricByLabels(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), map[string]string{
-		commonmetrics.LabelMethod:      http.MethodPost,
-		commonmetrics.LabelRoute:       "/body",
-		commonmetrics.LabelStatusClass: "4xx",
+		platformmetrics.LabelMethod:      http.MethodPost,
+		platformmetrics.LabelRoute:       "/body",
+		platformmetrics.LabelStatusClass: "4xx",
 	})
 	require.Equal(t, float64(1), metric.GetCounter().GetValue())
 }

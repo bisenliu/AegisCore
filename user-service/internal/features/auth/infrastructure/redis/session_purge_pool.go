@@ -3,7 +3,7 @@ package redis
 import (
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/workerpool"
+	"github.com/aegiscore/platform/runtime/workerpool"
 )
 
 // NewSessionPurgePool 构造认证会话批量清理专用后台任务池。

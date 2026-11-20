@@ -1,7 +1,7 @@
 package redis
 
 import (
-	"github.com/aegiscore/common/runtime/rediskey"
+	"github.com/aegiscore/platform/runtime/rediskey"
 )
 
 // KeyCatalog 构造认证 Redis adapter 私有 key。

@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/aegiscore/common/runtime/localcache"
-	commonauth "github.com/aegiscore/common/security/auth"
+	"github.com/aegiscore/platform/runtime/localcache"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
@@ -112,10 +112,10 @@ func TestTokenVersionValidatorRejectsMismatchFromLocalCache(t *testing.T) {
 	}
 
 	err := validator.ValidateTokenVersion(context.Background(), userID, 7)
-	require.ErrorIs(t, err, commonauth.ErrTokenVersionMismatch,
+	require.ErrorIs(t, err, platformauth.ErrTokenVersionMismatch,
 		"err = %v, want ErrTokenVersionMismatch", err)
 
-	var mismatch *commonauth.TokenVersionMismatchError
+	var mismatch *platformauth.TokenVersionMismatchError
 	require.False(t, !errors.As(err, &mismatch) || mismatch.Current != 8 || mismatch.Token != 7,
 		"mismatch = %#v, err = %v", mismatch, err)
 
@@ -287,7 +287,7 @@ func TestTokenVersionValidatorConcurrentInvalidationRejectsStaleVersion(t *testi
 	require.EqualValues(t, 2, waitTokenVersionLoad(t, started))
 	close(releases[1])
 
-	require.ErrorIs(t, waitTokenVersionLoad(t, result), commonauth.ErrTokenVersionMismatch)
+	require.ErrorIs(t, waitTokenVersionLoad(t, result), platformauth.ErrTokenVersionMismatch)
 	require.NoError(t, validator.ValidateTokenVersion(context.Background(), tokenVersionTestUserID, 2))
 	require.EqualValues(t, 2, loads.Load())
 }

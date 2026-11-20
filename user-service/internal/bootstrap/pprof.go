@@ -7,10 +7,10 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	commonpprof "github.com/aegiscore/common/http/pprof"
-	commonconfig "github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/httpserver"
-	"github.com/aegiscore/common/runtime/logger"
+	platformpprof "github.com/aegiscore/platform/http/pprof"
+	platformconfig "github.com/aegiscore/platform/runtime/config"
+	"github.com/aegiscore/platform/runtime/httpserver"
+	"github.com/aegiscore/platform/runtime/logger"
 )
 
 // PprofRuntime 表达独立 pprof server 的启用状态和可选运行实例。
@@ -25,7 +25,7 @@ type PprofServerParams struct {
 
 	Lifecycle  fx.Lifecycle
 	Shutdowner fx.Shutdowner
-	Config     *commonconfig.Config
+	Config     *platformconfig.Config
 	Log        *zap.Logger
 }
 
@@ -47,7 +47,7 @@ func NewPprofServer(params PprofServerParams) (*PprofRuntime, error) {
 	managed, err := httpserver.New(httpserver.Options{
 		Name:            "pprof",
 		Addr:            pprofCfg.Addr,
-		Handler:         commonpprof.Handler(commonpprof.Options{}),
+		Handler:         platformpprof.Handler(platformpprof.Options{}),
 		ShutdownTimeout: params.Config.Server.HTTP.ShutdownTimeout,
 		OnServeError:    newRuntimeServerFailureHandler(pprofLog, params.Shutdowner, "pprof"),
 	})

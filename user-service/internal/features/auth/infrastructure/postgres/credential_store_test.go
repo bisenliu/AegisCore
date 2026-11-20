@@ -9,7 +9,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 
-	runtimeid "github.com/aegiscore/common/runtime/id"
+	runtimeid "github.com/aegiscore/platform/runtime/id"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/enttest"

@@ -11,7 +11,7 @@
 
 仓库级旧身份位于 `project.yaml`，只供更名脚本读取。更换整个项目内部标识时运行 `./scripts/rename-project.sh`，不要手工全局替换。先用 `--dry-run` 预览，确认后追加 `--apply`。推荐使用 `--module <path>` 简便用法（自动推导环境变量、指标、镜像前缀和展示名），亦可逐项传入 `--module-prefix`、`--env-prefix`、`--metric-prefix`、`--image-prefix`、`--display-name` 显式覆盖。`--apply` 要求当前 Git 工作区纯净，并先检查 `go version`，失败时不写文件；成功后更新 module、环境变量、指标、镜像前缀和未加分隔符的项目名，再执行 `go work sync`、Ent 生成和 OpenAPI 生成。它会改名带旧镜像前缀的 Helm chart 目录，不移动服务目录，不修改 `user-service/internal/shared/rbacbaseline/ids.go` 中已固化的系统 ID，也不把新身份回写到 `project.yaml`。更名及代码生成成功后自动删除 `project.yaml`、`.github`、`.git`、`renovate.json` 和 `coverage/`，不初始化新 Git 仓库；预览或生成失败时保留这些资源。脚本支持从子目录调用，文本只替换一次，避免新名称包含旧名称时重复改写；路径仅从 Git 跟踪资源推导，目标已存在时中止。执行失败或中断时恢复 Git 跟踪内容并清理新增的非忽略文件；生成器修改的忽略文件不在 Git 恢复范围内。成功后原 Git 历史和 remote 配置会被移除；不再支持 `--drop-git`、`--drop-github` 和 `--reset-git`，linked worktree 不支持 `--apply`。正文仍有旧名字时，用 `--from-*` 指定旧身份再跑一次。完整命令见根 `README.md`。
 
-新增根目录业务服务时，只追加根 `Makefile` 的 `BUSINESS_SERVICES` 和 `go.work` 的 `use` 条目。服务目录与 `user-service/` 平级，不创建 `services/`。新服务复制启动、配置、provider 和 router 骨架，不复制 `user-service/internal/features/`、RBAC CLI 或 Ent schema。服务 module 只能依赖 `github.com/aegiscore/common`，不得 import 其他业务服务。共享 Nacos `resources.yaml` 中的新资源名必须带服务前缀；user-service 继续使用已发布的 `cache_redis` 和 `primary_db`。
+新增根目录业务服务时，只追加根 `Makefile` 的 `BUSINESS_SERVICES` 和 `go.work` 的 `use` 条目。服务目录与 `user-service/` 平级，不创建 `services/`。新服务复制启动、配置、provider 和 router 骨架，不复制 `user-service/internal/features/`、RBAC CLI 或 Ent schema。服务 module 只能依赖 `github.com/aegiscore/platform`，不得 import 其他业务服务。共享 Nacos `resources.yaml` 中的新资源名必须带服务前缀；user-service 继续使用已发布的 `cache_redis` 和 `primary_db`。
 
 ### 1.1 Go 工具链版本治理
 
@@ -76,7 +76,7 @@ go run ./cmd serve
 
 配置从 Nacos 按默认顺序加载 `base.yaml`、`resources.yaml`、`${AEGISCORE_SERVICE}.yaml`。仓库在 `deployments/nacos/local-host/` 和 `local-docker/` 中分别保存三份完整配置：`loca-host` 使用宿主机映射端口，`loca-docker` 使用 Compose DNS 和容器端口。环境变量只选择 Nacos 来源，不覆盖业务字段。完整加载顺序固定为：`source -> documents -> deep merge -> raw digest -> strict decode（defaults 初值、raw 覆盖、unknown key 拒绝）-> normalize -> validate -> effective encode -> redact/render`。raw digest 只描述合并后的原始来源，不受默认值或 effective encode 变化影响；`config render` 编码最终生效配置后再脱敏敏感字段。
 
-`common/runtime/config` 只拥有业务中立的 document/source contract、YAML deep merge、raw digest、strict decode、effective encode、redact 和 render 原语；`common/runtime/config/nacos` 是独立 adapter，拥有 Nacos 环境变量、HTTP client、认证、timeout、failover 和文档读取。user-service 的 `internal/config.DefaultConfig()` 集中组装完整默认初值，并由显式 normalize 和 validate 完成服务级处理；composition root 再派生 `AuthSettings`、`RBACSettings`、`EntSettings` 和 `ResourceSettings`，auth、permission/RBAC、Ent 与具名资源 provider 不读取完整根配置。共享核心配置只有 `app`、`runtime`、`server`、`log`、`observability`；user-service 在 `resources` 下声明 `cache_redis` 和 `primary_db`，并在 `auth.token_version_cache`、`rbac.user_role_cache` 下声明 feature cache 的启停与 TTL；容量和回源超时留在 user-service 代码常量。
+`platform/runtime/config` 只拥有业务中立的 document/source contract、YAML deep merge、raw digest、strict decode、effective encode、redact 和 render 原语；`platform/runtime/config/nacos` 是独立 adapter，拥有 Nacos 环境变量、HTTP client、认证、timeout、failover 和文档读取。user-service 的 `internal/config.DefaultConfig()` 集中组装完整默认初值，并由显式 normalize 和 validate 完成服务级处理；composition root 再派生 `AuthSettings`、`RBACSettings`、`EntSettings` 和 `ResourceSettings`，auth、permission/RBAC、Ent 与具名资源 provider 不读取完整根配置。共享核心配置只有 `app`、`runtime`、`server`、`log`、`observability`；user-service 在 `resources` 下声明 `cache_redis` 和 `primary_db`，并在 `auth.token_version_cache`、`rbac.user_role_cache` 下声明 feature cache 的启停与 TTL；容量和回源超时留在 user-service 代码常量。
 
 配置读取直接使用 Nacos 3.x 的 v3 Client HTTP API，只需要访问 `8848`。`AEGISCORE_NACOS_ADDR` 支持逗号分隔的多个地址并按顺序 failover；地址可以包含自定义 context path。启用 Nacos client auth 时必须同时设置 `AEGISCORE_NACOS_USERNAME` 和 `AEGISCORE_NACOS_PASSWORD`，客户端登录一次后复用 access token。
 
@@ -195,7 +195,7 @@ make user-service-bootstrap-super-admin
 
 ID 约束：
 
-- 普通运行时业务实体继续使用 `common/runtime/id.NewUUID()` 生成 UUID v7。
+- 普通运行时业务实体继续使用 `platform/runtime/id.NewUUID()` 生成 UUID v7。
 - 系统内置 RBAC 角色、权限和 bootstrap 用户 ID 由 `user-service/internal/shared/rbacbaseline/ids.go` 中的手写固化 UUID 字符串常量定义。
 - 从基础框架初始化全新项目时可以写入新的系统 ID 常量；已有项目重命名时不得默认修改、重算或复用这些 ID，也不得修改既有数据库中的 RBAC 数据。
 

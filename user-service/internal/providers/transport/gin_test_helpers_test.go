@@ -12,9 +12,9 @@ import (
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/grpc"
 
-	"github.com/aegiscore/common/runtime/config"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	"github.com/aegiscore/platform/runtime/config"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
+	platformtracing "github.com/aegiscore/platform/runtime/observability/tracing"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
@@ -31,13 +31,13 @@ func ginTestHTTPSettings() serviceconfig.HTTPSettings {
 	return serviceconfig.HTTPSettings{RequestBodyMaxBytes: serviceconfig.DefaultHTTPRequestBodyMaxBytes}
 }
 
-func newGinTestTracingProvider(t *testing.T, cfg *config.Config) *commontracing.Provider {
+func newGinTestTracingProvider(t *testing.T, cfg *config.Config) *platformtracing.Provider {
 	t.Helper()
 	provider, _ := newGinTestTracingProviderWithCollector(t, cfg)
 	return provider
 }
 
-func newGinTestTracingProviderWithCollector(t *testing.T, cfg *config.Config) (*commontracing.Provider, *testOTLPTraceService) {
+func newGinTestTracingProviderWithCollector(t *testing.T, cfg *config.Config) (*platformtracing.Provider, *testOTLPTraceService) {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -47,7 +47,7 @@ func newGinTestTracingProviderWithCollector(t *testing.T, cfg *config.Config) (*
 	go func() { _ = collector.Serve(listener) }()
 	cfg.Observability.Tracing.OTLPEndpoint = listener.Addr().String()
 	cfg.Observability.Tracing.Insecure = true
-	provider, err := commontracing.NewProvider(context.Background(), commontracing.Options{
+	provider, err := platformtracing.NewProvider(context.Background(), platformtracing.Options{
 		Config:      cfg.Observability.Tracing,
 		ServiceName: cfg.App.Name,
 		Environment: cfg.App.Environment,
@@ -86,14 +86,14 @@ func (s *testOTLPTraceService) Spans() []*tracepb.Span {
 	return spans
 }
 
-func newGinTestTracingProviderWithRecorder(t *testing.T, cfg *config.Config) (*commontracing.Provider, *testOTLPTraceService) {
+func newGinTestTracingProviderWithRecorder(t *testing.T, cfg *config.Config) (*platformtracing.Provider, *testOTLPTraceService) {
 	t.Helper()
 	return newGinTestTracingProviderWithCollector(t, cfg)
 }
 
-func newGinTestMetricsProvider(t *testing.T, cfg *config.Config) *commonmetrics.Provider {
+func newGinTestMetricsProvider(t *testing.T, cfg *config.Config) *platformmetrics.Provider {
 	t.Helper()
-	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+	provider, err := platformmetrics.NewProvider(platformmetrics.Options{
 		Config:      cfg.Observability.Metrics,
 		ServiceName: cfg.App.Name,
 		Environment: cfg.App.Environment,
@@ -102,7 +102,7 @@ func newGinTestMetricsProvider(t *testing.T, cfg *config.Config) *commonmetrics.
 	return provider
 }
 
-func gatherGinMetricFamily(t *testing.T, provider *commonmetrics.Provider, name string) *dto.MetricFamily {
+func gatherGinMetricFamily(t *testing.T, provider *platformmetrics.Provider, name string) *dto.MetricFamily {
 	t.Helper()
 	families, err := provider.Gatherer().Gather()
 	require.NoError(t, err)
@@ -149,7 +149,7 @@ func ginMetricHasLabels(metric *dto.Metric, labels map[string]string) bool {
 	return true
 }
 
-func assertGinMetricFamilyMissing(t *testing.T, provider *commonmetrics.Provider, name string) {
+func assertGinMetricFamilyMissing(t *testing.T, provider *platformmetrics.Provider, name string) {
 	t.Helper()
 	families, err := provider.Gatherer().Gather()
 	require.NoError(t, err)
@@ -167,13 +167,13 @@ func assertGinMetricFamilyMissingLabelValue(t *testing.T, family *dto.MetricFami
 	}
 }
 
-func exportedSpans(t *testing.T, provider *commontracing.Provider, collector *testOTLPTraceService) []*tracepb.Span {
+func exportedSpans(t *testing.T, provider *platformtracing.Provider, collector *testOTLPTraceService) []*tracepb.Span {
 	t.Helper()
 	require.NoError(t, provider.Shutdown(context.Background()))
 	return collector.Spans()
 }
 
-func endedGinSpan(t *testing.T, provider *commontracing.Provider, collector *testOTLPTraceService) *tracepb.Span {
+func endedGinSpan(t *testing.T, provider *platformtracing.Provider, collector *testOTLPTraceService) *tracepb.Span {
 	t.Helper()
 	spans := exportedSpans(t, provider, collector)
 	require.Len(t, spans, 1)

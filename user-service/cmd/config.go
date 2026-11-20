@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	commonconfig "github.com/aegiscore/common/runtime/config"
-	commonnacos "github.com/aegiscore/common/runtime/config/nacos"
+	platformconfig "github.com/aegiscore/platform/runtime/config"
+	platformnacos "github.com/aegiscore/platform/runtime/config/nacos"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
@@ -53,8 +53,8 @@ func newConfigRenderCommand(loadConfig configLoader) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// CLI 只渲染 user-service 自己声明的脱敏结果，避免 common 隐式持有服务私有 secret 路径。
-			rendered, err := commonconfig.RenderYAML(serviceconfig.RedactEffectiveSettings(settings))
+			// CLI 只渲染 user-service 自己声明的脱敏结果，避免 platform 隐式持有服务私有 secret 路径。
+			rendered, err := platformconfig.RenderYAML(serviceconfig.RedactEffectiveSettings(settings))
 			if err != nil {
 				return err
 			}
@@ -71,7 +71,7 @@ func newConfigSourcesCommand() *cobra.Command {
 		Short: "Show Nacos runtime configuration source order",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			env, err := commonnacos.LoadEnv()
+			env, err := platformnacos.LoadEnv()
 			if err != nil {
 				return err
 			}
@@ -81,7 +81,7 @@ func newConfigSourcesCommand() *cobra.Command {
 				fmt.Sprintf("config_service: %s", env.Service),
 				fmt.Sprintf("config_namespace: %s", env.Namespace),
 				fmt.Sprintf("config_group: %s", env.Group),
-				fmt.Sprintf("config_data_ids: %s", commonconfig.SourceMetadata{DataIDs: env.DataIDs}.DataIDsCSV()),
+				fmt.Sprintf("config_data_ids: %s", platformconfig.SourceMetadata{DataIDs: env.DataIDs}.DataIDsCSV()),
 				fmt.Sprintf("config_timeout: %s", env.Timeout.Round(time.Millisecond)),
 			}
 			if env.Username != "" || env.Password != "" {

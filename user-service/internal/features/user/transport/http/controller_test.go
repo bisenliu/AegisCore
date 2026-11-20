@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	"github.com/aegiscore/common/contract/response"
-	"github.com/aegiscore/common/validation"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	"github.com/aegiscore/platform/contract/response"
+	"github.com/aegiscore/platform/validation"
 	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"

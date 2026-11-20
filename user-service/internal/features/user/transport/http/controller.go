@@ -3,9 +3,9 @@ package userhttp
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/aegiscore/common/http/binding"
-	"github.com/aegiscore/common/http/response"
-	commonvalidation "github.com/aegiscore/common/validation"
+	"github.com/aegiscore/platform/http/binding"
+	"github.com/aegiscore/platform/http/response"
+	platformvalidation "github.com/aegiscore/platform/validation"
 	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 )
@@ -14,11 +14,11 @@ import (
 type UserController struct {
 	commands  usercommand.CreateUserService
 	queries   userquery.UserQueryService
-	validator *commonvalidation.Validator
+	validator *platformvalidation.Validator
 }
 
 // NewUserController 创建用户接口控制器，组装用户写入、查询以及参数校验服务。
-func NewUserController(commands usercommand.CreateUserService, queries userquery.UserQueryService, validator *commonvalidation.Validator) *UserController {
+func NewUserController(commands usercommand.CreateUserService, queries userquery.UserQueryService, validator *platformvalidation.Validator) *UserController {
 	return &UserController{commands: commands, queries: queries, validator: validator}
 }
 

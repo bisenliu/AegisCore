@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	"github.com/aegiscore/common/contract/response"
-	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/validation"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	"github.com/aegiscore/platform/contract/response"
+	platformauth "github.com/aegiscore/platform/security/auth"
+	"github.com/aegiscore/platform/validation"
 	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
@@ -38,7 +38,7 @@ func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 		require.False(t, !ok || clientContext.ClientIP != "203.0.113.20" || clientContext.UserAgent != "auth-controller-test",
 			"clientContext = %#v, %v", clientContext, ok)
 
-		return &authcommand.LoginResult{Tokens: &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}, nil
+		return &authcommand.LoginResult{Tokens: &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: platformauth.TokenTypeBearer, ExpiresIn: 900}}, nil
 	})
 
 	status, envelope := executeAuthLogin(t, ctl, `{"username":" alice ","password":" secret "}`)
@@ -48,7 +48,7 @@ func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 		"envelope = %#v", envelope)
 
 	data, ok := envelope.Data.(map[string]any)
-	require.False(t, !ok || data["access_token"] != "access" || data["refresh_token"] != "refresh" || data["token_type"] != commonauth.TokenTypeBearer || data["expires_in"] != float64(900),
+	require.False(t, !ok || data["access_token"] != "access" || data["refresh_token"] != "refresh" || data["token_type"] != platformauth.TokenTypeBearer || data["expires_in"] != float64(900),
 		"data = %#v", envelope.Data)
 	_, ok = data["status"]
 	require.False(t, ok,
@@ -63,7 +63,7 @@ func TestAuthControllerLoginUsesTrustedProxyClientIP(t *testing.T) {
 		clientContext, ok := authctx.ClientContextFromContext(ctx)
 		require.False(t, !ok || clientContext.ClientIP != "203.0.113.50" || clientContext.UserAgent != "auth-controller-test",
 			"clientContext = %#v, %v", clientContext, ok)
-		return &authcommand.LoginResult{Tokens: &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}, nil
+		return &authcommand.LoginResult{Tokens: &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: platformauth.TokenTypeBearer, ExpiresIn: 900}}, nil
 	})
 
 	engine := gin.New()
@@ -88,7 +88,7 @@ func TestAuthControllerLoginUsesTrustedProxyClientIP(t *testing.T) {
 func TestAuthControllerLoginMapsPasswordChangeRequiredCode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctl, mocks := newTestAuthController(t)
-	mocks.login.EXPECT().Login(gomock.Any(), authcommand.LoginCommand{Username: "alice", Password: "secret"}).Return(&authcommand.LoginResult{PasswordChangeRequired: true, Tokens: &authtokens.TokenResult{AccessToken: "password-change", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}, nil)
+	mocks.login.EXPECT().Login(gomock.Any(), authcommand.LoginCommand{Username: "alice", Password: "secret"}).Return(&authcommand.LoginResult{PasswordChangeRequired: true, Tokens: &authtokens.TokenResult{AccessToken: "password-change", TokenType: platformauth.TokenTypeBearer, ExpiresIn: 900}}, nil)
 
 	status, envelope := executeAuthLogin(t, ctl, `{"username":"alice","password":"secret"}`)
 	require.Equal(t, http.StatusOK, status,
@@ -99,7 +99,7 @@ func TestAuthControllerLoginMapsPasswordChangeRequiredCode(t *testing.T) {
 	data, ok := envelope.Data.(map[string]any)
 	require.True(t, ok,
 		"data = %#v", envelope.Data)
-	require.False(t, data["access_token"] != "password-change" || data["token_type"] != commonauth.TokenTypeBearer || data["expires_in"] != float64(900),
+	require.False(t, data["access_token"] != "password-change" || data["token_type"] != platformauth.TokenTypeBearer || data["expires_in"] != float64(900),
 		"data = %#v", envelope.Data)
 	_, ok = data["status"]
 	require.False(t, ok,
@@ -162,7 +162,7 @@ func TestAuthControllerForceChangePasswordNormalizesToCommand(t *testing.T) {
 	ctl, mocks := newTestAuthController(t)
 	mocks.forceChange.EXPECT().ForceChangePassword(gomock.Any(), authcommand.ForceChangePasswordCommand{Token: "password-token", NewPassword: "new-secret-123"}).Return(&authcommand.ForceChangePasswordResult{Changed: true}, nil)
 
-	status, envelope := executeAuthForceChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":" new-secret-123 "}`)
+	status, envelope := executeAuthForceChangePassword(t, ctl, platformauth.TokenPrefix+"password-token", `{"new_password":" new-secret-123 "}`)
 	require.Equal(t, http.StatusOK, status,
 		"status = %d, want %d", status, http.StatusOK)
 	require.False(t, !envelope.Success || envelope.Code != contracterrors.CodeOK,
@@ -178,7 +178,7 @@ func TestAuthControllerForceChangePasswordRejectsShortPassword(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctl, _ := newTestAuthController(t)
 
-	status, envelope := executeAuthForceChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":"short"}`)
+	status, envelope := executeAuthForceChangePassword(t, ctl, platformauth.TokenPrefix+"password-token", `{"new_password":"short"}`)
 	require.Equal(t, http.StatusBadRequest, status,
 		"status = %d, want %d", status, http.StatusBadRequest)
 	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeValidationFailed,
@@ -190,7 +190,7 @@ func TestAuthControllerForceChangePasswordRejectsLongPassword(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctl, _ := newTestAuthController(t)
 
-	status, envelope := executeAuthForceChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":"`+strings.Repeat("a", 257)+`"}`)
+	status, envelope := executeAuthForceChangePassword(t, ctl, platformauth.TokenPrefix+"password-token", `{"new_password":"`+strings.Repeat("a", 257)+`"}`)
 	require.Equal(t, http.StatusBadRequest, status,
 		"status = %d, want %d", status, http.StatusBadRequest)
 	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeValidationFailed,
@@ -217,7 +217,7 @@ func TestAuthControllerForceChangePasswordMapsNotFound(t *testing.T) {
 	ctl, mocks := newTestAuthController(t)
 	mocks.forceChange.EXPECT().ForceChangePassword(gomock.Any(), authcommand.ForceChangePasswordCommand{Token: "password-token", NewPassword: "new-secret-123"}).Return(nil, identity.ErrUserNotFound)
 
-	status, envelope := executeAuthForceChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":"new-secret-123"}`)
+	status, envelope := executeAuthForceChangePassword(t, ctl, platformauth.TokenPrefix+"password-token", `{"new_password":"new-secret-123"}`)
 	require.Equal(t, http.StatusNotFound, status,
 		"status = %d, want %d", status, http.StatusNotFound)
 	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeNotFound || envelope.Message != messages.UserNotFound,
@@ -230,7 +230,7 @@ func TestAuthControllerForceChangePasswordMapsRevocationIncomplete(t *testing.T)
 	ctl, mocks := newTestAuthController(t)
 	mocks.forceChange.EXPECT().ForceChangePassword(gomock.Any(), authcommand.ForceChangePasswordCommand{Token: "password-token", NewPassword: "new-secret-123"}).Return(nil, authdomain.ErrSessionRevocationIncomplete)
 
-	status, envelope := executeAuthForceChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":"new-secret-123"}`)
+	status, envelope := executeAuthForceChangePassword(t, ctl, platformauth.TokenPrefix+"password-token", `{"new_password":"new-secret-123"}`)
 	require.Equal(t, http.StatusServiceUnavailable, status,
 		"status = %d, want %d", status, http.StatusServiceUnavailable)
 	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeServiceUnavailable || envelope.Message != messages.AuthRevocationIncomplete,
@@ -240,7 +240,7 @@ func TestAuthControllerForceChangePasswordMapsRevocationIncomplete(t *testing.T)
 func TestAuthControllerRefreshNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctl, mocks := newTestAuthController(t)
-	mocks.refresh.EXPECT().Refresh(gomock.Any(), authcommand.RefreshTokenCommand{RefreshToken: "refresh-token"}).Return(&authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}, nil)
+	mocks.refresh.EXPECT().Refresh(gomock.Any(), authcommand.RefreshTokenCommand{RefreshToken: "refresh-token"}).Return(&authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: platformauth.TokenTypeBearer, ExpiresIn: 900}, nil)
 
 	status, envelope := executeAuthRefresh(t, ctl, `{"refresh_token":" Bearer refresh-token "}`)
 	require.Equal(t, http.StatusOK, status,
@@ -319,7 +319,7 @@ func executeAuthLogin(t *testing.T, ctl *AuthController, body string) (int, resp
 func executeAuthForceChangePassword(t *testing.T, ctl *AuthController, token string, body string) (int, response.Envelope) {
 	t.Helper()
 	recorder, ctx := newAuthJSONContext(http.MethodPost, "/api/v1/auth/force-change-password", body)
-	ctx.Request.Header.Set(commonauth.AuthorizationHeader, token)
+	ctx.Request.Header.Set(platformauth.AuthorizationHeader, token)
 
 	ctl.ForceChangePassword(ctx)
 

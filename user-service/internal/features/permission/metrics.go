@@ -8,7 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/fx"
 
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 )
@@ -52,7 +52,7 @@ type prometheusMetrics struct {
 type permissionMetricsParams struct {
 	fx.In
 
-	Provider     *commonmetrics.Provider
+	Provider     *platformmetrics.Provider
 	PolicyHealth permissionauthorization.PolicyHealth `name:"permission_policy_health"`
 }
 
@@ -122,37 +122,37 @@ func newPermissionMetrics(params permissionMetricsParams) (permissionapplication
 
 // PolicyReloadSucceeded 记录权限规则重新加载成功的次数。
 func (m *prometheusMetrics) PolicyReloadSucceeded(_ context.Context, source string) {
-	m.policySync.WithLabelValues(permissionapplication.MetricsOperationPolicyReload, commonmetrics.StatusSuccess, permissionapplication.MetricsReasonNone, rbacSource(source)).Inc()
+	m.policySync.WithLabelValues(permissionapplication.MetricsOperationPolicyReload, platformmetrics.StatusSuccess, permissionapplication.MetricsReasonNone, rbacSource(source)).Inc()
 }
 
 // PolicyReloadFailed 记录权限规则重新加载失败的次数及原因。
 func (m *prometheusMetrics) PolicyReloadFailed(_ context.Context, source string, reason string) {
-	m.policySync.WithLabelValues(permissionapplication.MetricsOperationPolicyReload, commonmetrics.StatusFailure, rbacReason(reason), rbacSource(source)).Inc()
+	m.policySync.WithLabelValues(permissionapplication.MetricsOperationPolicyReload, platformmetrics.StatusFailure, rbacReason(reason), rbacSource(source)).Inc()
 }
 
 // PolicyPublishSucceeded 记录广播权限变更通知成功的次数。
 func (m *prometheusMetrics) PolicyPublishSucceeded(context.Context) {
-	m.policySync.WithLabelValues(permissionapplication.MetricsOperationPolicyPublish, commonmetrics.StatusSuccess, permissionapplication.MetricsReasonNone, permissionapplication.MetricsSourceLocalChange).Inc()
+	m.policySync.WithLabelValues(permissionapplication.MetricsOperationPolicyPublish, platformmetrics.StatusSuccess, permissionapplication.MetricsReasonNone, permissionapplication.MetricsSourceLocalChange).Inc()
 }
 
 // PolicyPublishFailed 记录广播权限变更通知失败的次数。
 func (m *prometheusMetrics) PolicyPublishFailed(_ context.Context, reason string) {
-	m.policySync.WithLabelValues(permissionapplication.MetricsOperationPolicyPublish, commonmetrics.StatusFailure, rbacReason(reason), permissionapplication.MetricsSourceLocalChange).Inc()
+	m.policySync.WithLabelValues(permissionapplication.MetricsOperationPolicyPublish, platformmetrics.StatusFailure, rbacReason(reason), permissionapplication.MetricsSourceLocalChange).Inc()
 }
 
 // WatcherCheckFailed 记录监听组件执行健康检查或对账检查失败的次数。
 func (m *prometheusMetrics) WatcherCheckFailed(_ context.Context, source string, reason string) {
-	m.policySync.WithLabelValues(permissionapplication.MetricsOperationWatcherRevisionCheck, commonmetrics.StatusFailure, rbacReason(reason), rbacSource(source)).Inc()
+	m.policySync.WithLabelValues(permissionapplication.MetricsOperationWatcherRevisionCheck, platformmetrics.StatusFailure, rbacReason(reason), rbacSource(source)).Inc()
 }
 
 // WatcherReloadSucceeded 记录由网络广播触发的权限更新成功次数。
 func (m *prometheusMetrics) WatcherReloadSucceeded(_ context.Context, source string) {
-	m.policySync.WithLabelValues(permissionapplication.MetricsOperationWatcherReload, commonmetrics.StatusSuccess, permissionapplication.MetricsReasonNone, rbacSource(source)).Inc()
+	m.policySync.WithLabelValues(permissionapplication.MetricsOperationWatcherReload, platformmetrics.StatusSuccess, permissionapplication.MetricsReasonNone, rbacSource(source)).Inc()
 }
 
 // WatcherReloadFailed 记录由网络广播触发的权限更新失败次数。
 func (m *prometheusMetrics) WatcherReloadFailed(_ context.Context, source string, reason string) {
-	m.policySync.WithLabelValues(permissionapplication.MetricsOperationWatcherReload, commonmetrics.StatusFailure, rbacReason(reason), rbacSource(source)).Inc()
+	m.policySync.WithLabelValues(permissionapplication.MetricsOperationWatcherReload, platformmetrics.StatusFailure, rbacReason(reason), rbacSource(source)).Inc()
 }
 
 // WatcherVersionMismatch 记录本地缓存版本与数据库真实版本出现差异的次数。

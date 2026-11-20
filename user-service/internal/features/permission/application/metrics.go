@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-//go:generate go run github.com/aegiscore/common/runtime/observability/metrics/nopgen -source metrics.go -type Metrics -output metrics_nop_gen.go -struct nopMetrics -func NopMetrics -comment "NopMetrics 返回 permission/RBAC 业务指标空实现。"
+//go:generate go run github.com/aegiscore/platform/runtime/observability/metrics/nopgen -source metrics.go -type Metrics -output metrics_nop_gen.go -struct nopMetrics -func NopMetrics -comment "NopMetrics 返回 permission/RBAC 业务指标空实现。"
 
 const (
 	// MetricsOperationPolicyReload 表示 RBAC policy reload 操作。

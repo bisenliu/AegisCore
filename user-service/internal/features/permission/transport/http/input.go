@@ -4,7 +4,7 @@ import (
 	"strings"
 	"uuid"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 	"github.com/aegiscore/user-service/internal/messages"
 )

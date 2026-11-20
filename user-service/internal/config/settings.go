@@ -3,7 +3,7 @@ package config
 import (
 	"time"
 
-	commonresources "github.com/aegiscore/common/runtime/resources"
+	platformresources "github.com/aegiscore/platform/runtime/resources"
 )
 
 // AuthSettings 是认证 feature 构造运行时组件所需的最小配置视图。
@@ -46,8 +46,8 @@ type TimezoneSettings struct {
 
 // ResourceSettings 是 user-service 具名资源 provider 所需的配置视图。
 type ResourceSettings struct {
-	Redis    commonresources.RedisConfigs
-	Postgres commonresources.PostgresConfigs
+	Redis    platformresources.RedisConfigs
+	Postgres platformresources.PostgresConfigs
 }
 
 // NewAuthSettings 从根配置派生认证 feature settings。

@@ -1,6 +1,6 @@
 package rolehttp
 
-import "github.com/aegiscore/common/contract/pagination"
+import "github.com/aegiscore/platform/contract/pagination"
 
 // RoleResponse 是角色公开响应。
 type RoleResponse struct {

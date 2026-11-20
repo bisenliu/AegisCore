@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
-	commonauth "github.com/aegiscore/common/security/auth"
+	"github.com/aegiscore/platform/runtime/config"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
@@ -39,7 +39,7 @@ func TestRegisterRoutesRejectsMetricsPathConflict(t *testing.T) {
 		Config:        cfg,
 		Log:           zap.NewNop(),
 		Engine:        gin.New(),
-		JWT:           authtokens.NewAccessTokenVerifier(commonauth.NewJWTService(commonauth.JWTConfig{Secret: "secret"}), serviceconfig.AuthSettings{JWT: serviceconfig.JWTConfig{Secret: "secret"}}),
+		JWT:           authtokens.NewAccessTokenVerifier(platformauth.NewJWTService(platformauth.JWTConfig{Secret: "secret"}), serviceconfig.AuthSettings{JWT: serviceconfig.JWTConfig{Secret: "secret"}}),
 		TokenVersions: &routeTokenVersionValidator{version: 1},
 		Authorizer:    &routeAuthorizer{allowed: true},
 		Metrics:       newRouteTestMetricsProvider(t, cfg),

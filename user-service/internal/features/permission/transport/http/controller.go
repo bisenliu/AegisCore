@@ -3,20 +3,20 @@ package permissionhttp
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/aegiscore/common/http/binding"
-	"github.com/aegiscore/common/http/response"
-	commonvalidation "github.com/aegiscore/common/validation"
+	"github.com/aegiscore/platform/http/binding"
+	"github.com/aegiscore/platform/http/response"
+	platformvalidation "github.com/aegiscore/platform/validation"
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 )
 
 // PermissionController 负责接收和处理权限目录查询相关的 HTTP 接口请求。
 type PermissionController struct {
 	queries   permissionquery.PermissionQueryService
-	validator *commonvalidation.Validator
+	validator *platformvalidation.Validator
 }
 
 // NewPermissionController 创建权限接口控制器，组装权限查询与参数校验服务。
-func NewPermissionController(queries permissionquery.PermissionQueryService, validator *commonvalidation.Validator) *PermissionController {
+func NewPermissionController(queries permissionquery.PermissionQueryService, validator *platformvalidation.Validator) *PermissionController {
 	return &PermissionController{queries: queries, validator: validator}
 }
 

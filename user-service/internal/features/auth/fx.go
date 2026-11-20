@@ -10,11 +10,11 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/localcache"
-	"github.com/aegiscore/common/runtime/workerpool"
-	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/security/password"
-	commonvalidation "github.com/aegiscore/common/validation"
+	"github.com/aegiscore/platform/runtime/localcache"
+	"github.com/aegiscore/platform/runtime/workerpool"
+	platformauth "github.com/aegiscore/platform/security/auth"
+	"github.com/aegiscore/platform/security/password"
+	platformvalidation "github.com/aegiscore/platform/validation"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
@@ -163,7 +163,7 @@ type TokenVersionValidatorParams struct {
 type TokenVersionValidatorResult struct {
 	fx.Out
 
-	Validator   commonauth.TokenVersionValidator
+	Validator   platformauth.TokenVersionValidator
 	Invalidator authvalidators.TokenVersionLocalInvalidator
 }
 
@@ -178,7 +178,7 @@ type AuthControllerParams struct {
 	ForceChange   authcommand.ForceChangePasswordUseCase
 	LogoutCurrent authcommand.LogoutCurrentSessionUseCase
 	LogoutAll     authcommand.LogoutAllSessionsUseCase
-	Validator     *commonvalidation.Validator
+	Validator     *platformvalidation.Validator
 }
 
 // 运行时资源 holder

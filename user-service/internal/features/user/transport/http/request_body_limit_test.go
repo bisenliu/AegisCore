@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	contractresponse "github.com/aegiscore/common/contract/response"
-	commonmw "github.com/aegiscore/common/http/middleware"
-	"github.com/aegiscore/common/validation"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	contractresponse "github.com/aegiscore/platform/contract/response"
+	platformmw "github.com/aegiscore/platform/http/middleware"
+	"github.com/aegiscore/platform/validation"
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 )
 
@@ -39,7 +39,7 @@ func TestCreateUserRejectsOversizedRequestBodies(t *testing.T) {
 				NewMockUserQueryService(gomock.NewController(t)),
 				validator,
 			)
-			limit, err := commonmw.RequestBodyLimit(maxBytes)
+			limit, err := platformmw.RequestBodyLimit(maxBytes)
 			require.NoError(t, err)
 			engine := gin.New()
 			engine.Use(limit)
@@ -69,7 +69,7 @@ func TestUserListQueryIsUnaffectedByRequestBodyLimit(t *testing.T) {
 	queries := NewMockUserQueryService(gomock.NewController(t))
 	queries.EXPECT().ListUsers(gomock.Any(), gomock.Any()).Return(&userquery.ListUsersResult{Items: nil, PageSize: 20}, nil)
 	ctl := NewUserController(NewMockCreateUserService(gomock.NewController(t)), queries, validator)
-	limit, err := commonmw.RequestBodyLimit(1)
+	limit, err := platformmw.RequestBodyLimit(1)
 	require.NoError(t, err)
 	engine := gin.New()
 	engine.Use(limit)

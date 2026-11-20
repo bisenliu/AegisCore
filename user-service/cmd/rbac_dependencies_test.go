@@ -6,13 +6,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	commonresources "github.com/aegiscore/common/runtime/resources"
+	platformresources "github.com/aegiscore/platform/runtime/resources"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 func TestRBACPostgresConfigUsesServiceResource(t *testing.T) {
-	want := commonresources.PostgresConfig{Host: "db.internal", Port: 5432, Username: "aegiscore", DBName: "users"}
-	cfg := &serviceconfig.Config{Resources: serviceconfig.ResourcesConfig{Postgres: commonresources.PostgresConfigs{
+	want := platformresources.PostgresConfig{Host: "db.internal", Port: 5432, Username: "aegiscore", DBName: "users"}
+	cfg := &serviceconfig.Config{Resources: serviceconfig.ResourcesConfig{Postgres: platformresources.PostgresConfigs{
 		"primary_db": want,
 		"audit_db":   {Host: "audit.internal", Port: 5432, Username: "audit", DBName: "audit"},
 	}}}

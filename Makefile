@@ -1,4 +1,4 @@
-COMMON_DIR := common
+PLATFORM_DIR := platform
 TOOLS_OPENAPI_CONVERT_DIR := tools/openapi-convert
 TOOLS_NACOS_CONFIG_SEED_DIR := tools/nacos-config-seed
 # 根目录业务服务清单。新增服务时追加目录名，并同步登记 go.work。
@@ -24,7 +24,7 @@ LOCAL_NACOS_ENV = \
 export ADMIN_BOOTSTRAP_PASSWORD
 
 .PHONY: help build test test-containers coverage lint verify
-.PHONY: common-test common-test-containers common-lint common-generate common-verify
+.PHONY: platform-test platform-test-containers platform-lint platform-generate platform-verify
 .PHONY: tools-openapi-convert-test tools-openapi-convert-lint tools-nacos-config-seed-test tools-nacos-config-seed-lint tools-nacos-config-seed-local-host tools-nacos-config-seed-local-docker
 .PHONY: user-service-build user-service-run user-service-test user-service-test-containers user-service-rbac-sync-race-test user-service-lint user-service-verify user-service-architecture-lint
 .PHONY: user-service-seed-rbac user-service-bootstrap-super-admin user-service-image-verify
@@ -36,36 +36,36 @@ help: ## 查看可用命令。
 
 build: $(addsuffix -build,$(BUSINESS_SERVICES)) ## 构建全部已登记业务服务二进制。
 
-test: common-test $(addsuffix -test,$(BUSINESS_SERVICES)) tools-openapi-convert-test tools-nacos-config-seed-test ## 运行全部 Go 模块测试。
+test: platform-test $(addsuffix -test,$(BUSINESS_SERVICES)) tools-openapi-convert-test tools-nacos-config-seed-test ## 运行全部 Go 模块测试。
 
-test-containers: common-test-containers $(addsuffix -test-containers,$(BUSINESS_SERVICES)) ## 运行 common 与已登记业务服务的全部 Docker-backed 测试。
+test-containers: platform-test-containers $(addsuffix -test-containers,$(BUSINESS_SERVICES)) ## 运行 platform 与已登记业务服务的全部 Docker-backed 测试。
 
 coverage: ## 生成覆盖率报告并检查手写关键包基线。
 	./scripts/check-coverage.sh
 
-lint: common-lint $(addsuffix -lint,$(BUSINESS_SERVICES)) tools-openapi-convert-lint tools-nacos-config-seed-lint ## 运行全部 Go 模块 lint。
+lint: platform-lint $(addsuffix -lint,$(BUSINESS_SERVICES)) tools-openapi-convert-lint tools-nacos-config-seed-lint ## 运行全部 Go 模块 lint。
 
-verify: lint $(addsuffix -architecture-lint,$(BUSINESS_SERVICES)) github-actions-pins-check delivery-verify common-generate $(addsuffix -generate,$(BUSINESS_SERVICES)) test $(addsuffix -openapi-generate,$(BUSINESS_SERVICES)) ## 运行完整本地验证。
+verify: lint $(addsuffix -architecture-lint,$(BUSINESS_SERVICES)) github-actions-pins-check delivery-verify platform-generate $(addsuffix -generate,$(BUSINESS_SERVICES)) test $(addsuffix -openapi-generate,$(BUSINESS_SERVICES)) ## 运行完整本地验证。
 	@if [ -e .git ]; then git diff --exit-code -- . ':(exclude)AGENTS.md' ':(exclude)openspec/AGENTS.md' ':(exclude)CLAUDE.md' ':(exclude).multica/project/resources.json' ':(exclude).multica/**'; \
 	else echo "git diff: skipped (project has no .git)"; fi
 
 github-actions-pins-check: ## 检查 GitHub Actions 第三方 Action 是否固定 commit SHA。
 	./scripts/check-github-actions-pins.sh
 
-common-test: ## 运行 common 模块测试。
-	$(MAKE) -C $(COMMON_DIR) test
+platform-test: ## 运行 platform 模块测试。
+	$(MAKE) -C $(PLATFORM_DIR) test
 
-common-test-containers: ## 运行 common Docker-backed 测试。
-	$(MAKE) -C $(COMMON_DIR) test-containers
+platform-test-containers: ## 运行 platform Docker-backed 测试。
+	$(MAKE) -C $(PLATFORM_DIR) test-containers
 
-common-lint: ## 运行 common 模块 lint。
-	$(MAKE) -C $(COMMON_DIR) lint
+platform-lint: ## 运行 platform 模块 lint。
+	$(MAKE) -C $(PLATFORM_DIR) lint
 
-common-generate: ## 生成 common Go 生成物。
-	$(MAKE) -C $(COMMON_DIR) generate
+platform-generate: ## 生成 platform Go 生成物。
+	$(MAKE) -C $(PLATFORM_DIR) generate
 
-common-verify: ## 运行 common 模块验证。
-	$(MAKE) -C $(COMMON_DIR) verify
+platform-verify: ## 运行 platform 模块验证。
+	$(MAKE) -C $(PLATFORM_DIR) verify
 
 tools-openapi-convert-test: ## 运行 OpenAPI 转换工具测试。
 	$(MAKE) -C $(TOOLS_OPENAPI_CONVERT_DIR) test

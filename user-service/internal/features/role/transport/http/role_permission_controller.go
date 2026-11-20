@@ -3,8 +3,8 @@ package rolehttp
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/aegiscore/common/http/binding"
-	"github.com/aegiscore/common/http/response"
+	"github.com/aegiscore/platform/http/binding"
+	"github.com/aegiscore/platform/http/response"
 )
 
 // ListRolePermissions 查询指定角色拥有的权限列表接口。

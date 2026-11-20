@@ -10,10 +10,10 @@ import (
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 
-	"github.com/aegiscore/common/runtime/datastore"
-	"github.com/aegiscore/common/runtime/logger"
-	commonresources "github.com/aegiscore/common/runtime/resources"
-	"github.com/aegiscore/common/security/password"
+	"github.com/aegiscore/platform/runtime/datastore"
+	"github.com/aegiscore/platform/runtime/logger"
+	platformresources "github.com/aegiscore/platform/runtime/resources"
+	"github.com/aegiscore/platform/security/password"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
 	rolebootstrap "github.com/aegiscore/user-service/internal/features/role/application/bootstrap"
@@ -90,13 +90,13 @@ func defaultRBACSeedDependencies(parent context.Context) (rbacSeedDependencies, 
 }
 
 // rbacPostgresConfig 从系统全局配置中提取数据库连接参数，确保数据库配置已填写。
-func rbacPostgresConfig(cfg *serviceconfig.Config) (commonresources.PostgresConfig, error) {
+func rbacPostgresConfig(cfg *serviceconfig.Config) (platformresources.PostgresConfig, error) {
 	if cfg == nil {
-		return commonresources.PostgresConfig{}, errors.New("user-service config is required")
+		return platformresources.PostgresConfig{}, errors.New("user-service config is required")
 	}
 	dbCfg, ok := cfg.Resources.Postgres[resources.NamePrimaryDB]
 	if !ok {
-		return commonresources.PostgresConfig{}, fmt.Errorf("resources.postgres.%s config not found", resources.NamePrimaryDB)
+		return platformresources.PostgresConfig{}, fmt.Errorf("resources.postgres.%s config not found", resources.NamePrimaryDB)
 	}
 	return dbCfg, nil
 }

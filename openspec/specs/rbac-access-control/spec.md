@@ -219,10 +219,10 @@
 
 - **WHEN** user-role cache 启用
 - **THEN** permission feature MUST 在 localcache 边界使用 `userID.String()` 作为规范 string key，并将 user-service 代码常量容量映射为最大 item 数
-- **AND** common MUST NOT 接收 key encoder、解析业务 UUID 或暴露底层 cache option
+- **AND** platform MUST NOT 接收 key encoder、解析业务 UUID 或暴露底层 cache option
 - **WHEN** 缓存命中
 - **THEN** loader 写入缓存前和 `RolesForUser` 返回前 MUST 复制 `[]uuid.UUID`，调用方修改返回 slice MUST NOT 污染缓存或后续读取
-- **AND** `common/runtime/localcache` MUST NOT 承担角色 ID clone 语义
+- **AND** `platform/runtime/localcache` MUST NOT 承担角色 ID clone 语义
 
 #### Scenario: 用户角色回源与缓存失效
 
@@ -306,7 +306,7 @@ RBAC watcher MUST 在单一显式生命周期内持续监督 Redis policy refres
 
 ### Requirement: RBAC 系统数据与运维 CLI
 
-系统 MUST 通过 `aegiscore-user-service` 根命令提供带服务上下文的 `rbac seed` 和一次性 `rbac bootstrap-super-admin`，用于维护系统基线和全新数据库的首次超级管理员引导。系统角色、系统权限、默认绑定和 bootstrap 用户 ID MUST 由 `internal/shared/rbacbaseline` 以手写保留 UUID 常量定义；普通运行时业务实体 MUST 继续使用 `common/runtime/id.NewUUID()` 生成 UUID v7。旧 `aegiscore-user-services` 根命令 MUST NOT 作为兼容入口保留。
+系统 MUST 通过 `aegiscore-user-service` 根命令提供带服务上下文的 `rbac seed` 和一次性 `rbac bootstrap-super-admin`，用于维护系统基线和全新数据库的首次超级管理员引导。系统角色、系统权限、默认绑定和 bootstrap 用户 ID MUST 由 `internal/shared/rbacbaseline` 以手写保留 UUID 常量定义；普通运行时业务实体 MUST 继续使用 `platform/runtime/id.NewUUID()` 生成 UUID v7。旧 `aegiscore-user-services` 根命令 MUST NOT 作为兼容入口保留。
 
 #### Scenario: 初始化系统基线
 
@@ -467,11 +467,11 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 - **WHEN** RBAC 关闭 watcher、store、Casbin Engine 或其他主动资源
 - **THEN** `Stop` 或 `Close` MUST NOT 关闭共享 Redis、Ent 或 PostgreSQL 资源
 - **AND** 关闭后授权 MUST 继续 fail-closed，不得因本地资源不可用产生允许结果
-- **AND** RBAC MUST NOT 把服务业务配置、权限基线、角色值复制或 key schema 下沉到 `common`
+- **AND** RBAC MUST NOT 把服务业务配置、权限基线、角色值复制或 key schema 下沉到 `platform`
 
 ### Requirement: 用户角色缓存配置与失效顺序门禁
 
-系统 MUST 使用 `common/runtime/localcache` 的业务中立 cache-wide revision 与发布门禁保护 user-role cache。user-service MUST 私有拥有该 feature cache 的启停、TTL 默认值、校验和配置映射；容量与 load timeout MUST 由 user-service 代码常量提供。任何在失效前开始但未发布的旧回源结果 MUST NOT 在失效后写入缓存或返回给授权 caller；permission feature MUST NOT 维护重复的 generation 门禁，cache disabled 模式 MUST 直接回源并保持 fail-closed。
+系统 MUST 使用 `platform/runtime/localcache` 的业务中立 cache-wide revision 与发布门禁保护 user-role cache。user-service MUST 私有拥有该 feature cache 的启停、TTL 默认值、校验和配置映射；容量与 load timeout MUST 由 user-service 代码常量提供。任何在失效前开始但未发布的旧回源结果 MUST NOT 在失效后写入缓存或返回给授权 caller；permission feature MUST NOT 维护重复的 generation 门禁，cache disabled 模式 MUST 直接回源并保持 fail-closed。
 
 #### Scenario: 单用户失效抑制旧 load 返回与写回
 
@@ -523,7 +523,7 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 - **WHEN** composition 构造用户角色 resolver、policy loader 或其他 RBAC runtime 资源
 - **THEN** permission/RBAC provider MUST 接收只包含职责所需字段的 RBAC settings
 - **AND** permission/RBAC feature MUST NOT 依赖完整 user-service 根配置或读取 auth、Ent、resources 等无关配置段
-- **AND** feature cache 配置、必需缓存名和角色值复制语义 MUST 留在 user-service，不得进入 `common/runtime/localcache`
+- **AND** feature cache 配置、必需缓存名和角色值复制语义 MUST 留在 user-service，不得进入 `platform/runtime/localcache`
 
 ### Requirement: RBAC policy revision 与副本同步
 
@@ -756,7 +756,7 @@ RBAC watcher MUST 以 PostgreSQL latest policy revision作为副本补偿和relo
 
 - **WHEN** permission feature查询latest policy revision
 - **THEN** application MUST 拥有只读最小revision source port，PostgreSQL/Ent adapter MUST 留在permission infrastructure，named database与lifecycle选择 MUST 留在composition
-- **AND** revision查询语义 MUST NOT 下沉到`common/`、`internal/shared/`或`internal/integration/`，application/domain MUST NOT 导入Ent concrete client或predicate包
+- **AND** revision查询语义 MUST NOT 下沉到`platform/`、`internal/shared/`或`internal/integration/`，application/domain MUST NOT 导入Ent concrete client或predicate包
 - **AND** watcher MUST 复用 policy revision source 与 user-role revision source，MUST NOT 创建 outbox、dispatcher 或第二套投递机制
 
 ### Requirement: RBAC 生产源码与测试辅助代码边界
@@ -772,7 +772,7 @@ RBAC 生产源码 MUST 只保留生产运行、生成期框架入口或稳定服
 #### Scenario: permission transport 验证显式授权白名单
 
 - **WHEN** permission HTTP transport 测试验证显式授权白名单绕过语义
-- **THEN** transport MUST 直接使用 `common/http/middleware` 拥有的 Casbin whitelist rule 和 option
+- **THEN** transport MUST 直接使用 `platform/http/middleware` 拥有的 Casbin whitelist rule 和 option
 - **AND** permission feature MUST NOT 保留没有服务专用语义的 type alias、转发 wrapper、兼容名称或虚构生产消费者
 
 #### Scenario: 默认角色 catalog 只描述当前基线
@@ -789,13 +789,13 @@ RBAC 生产源码 MUST 只保留生产运行、生成期框架入口或稳定服
 
 ### Requirement: Casbin reload metrics 归属 permission feature
 
-Casbin policy reload recorder MUST 由 user-service permission/RBAC 边界拥有。permission feature MUST 定义 Engine 消费的最小 reload recorder interface、disabled metrics 时使用的非 nil no-op 实现，以及使用通用 metrics Provider 注册 Prometheus collector 的实现。该 recorder MUST NOT 位于 `common/runtime/observability/metrics`、`user-service/internal/shared` 或 role feature。
+Casbin policy reload recorder MUST 由 user-service permission/RBAC 边界拥有。permission feature MUST 定义 Engine 消费的最小 reload recorder interface、disabled metrics 时使用的非 nil no-op 实现，以及使用通用 metrics Provider 注册 Prometheus collector 的实现。该 recorder MUST NOT 位于 `platform/runtime/observability/metrics`、`user-service/internal/shared` 或 role feature。
 
 #### Scenario: Engine 使用 permission-owned recorder
 
 - **WHEN** permission composition 构造 Casbin Engine
 - **THEN** Engine MUST 接收 permission-owned reload recorder interface
-- **AND** Engine MUST NOT import `common/runtime/observability/metrics` 以获得 Casbin reload 业务接口
+- **AND** Engine MUST NOT import `platform/runtime/observability/metrics` 以获得 Casbin reload 业务接口
 - **AND** Engine 的授权、reload、health 和 initialization 投影 MUST 继续指向同一个 engine 实例
 
 #### Scenario: 指标名称和语义保持不变
@@ -907,7 +907,7 @@ RBAC watcher MUST 分别维护 lifecycle、subscription 与 reconcile 状态，�
 #### Scenario: subscriber 与 watcher 责任边界
 
 - **WHEN** Redis 订阅需要建立、确认、取消、断连检测或重新建立
-- **THEN** `common/runtime/redispubsub` subscriber MAY 提供无业务语义 lifecycle primitive
+- **THEN** `platform/runtime/redispubsub` subscriber MAY 提供无业务语义 lifecycle primitive
 - **AND** policy revision envelope、数据库权威校准、reconcile 状态、user-role cache invalidation 和 watcher final state MUST 由 permission feature 拥有
 
 ### Requirement: RBAC policy sync race 与 stress 验证门禁
@@ -935,7 +935,7 @@ RBAC watcher MUST 分别维护 lifecycle、subscription 与 reconcile 状态，�
 
 ### Requirement: RBAC policy 写事务不得受共享 helper 隐式 5 秒断点限制
 
-RBAC 角色、角色权限、用户角色、系统绑定和超级管理员 bootstrap 的 PostgreSQL 事务 MUST 依赖 `common/runtime/datastore` 修正后的事务 lifecycle 语义。无原始 deadline 时，这些事务 MUST NOT 因 datastore helper 的固定 5 秒 timeout 被自动回滚；事务耗时、锁等待和慢查询边界 MUST 由调用方显式 deadline 或数据库 timeout 策略控制。
+RBAC 角色、角色权限、用户角色、系统绑定和超级管理员 bootstrap 的 PostgreSQL 事务 MUST 依赖 `platform/runtime/datastore` 修正后的事务 lifecycle 语义。无原始 deadline 时，这些事务 MUST NOT 因 datastore helper 的固定 5 秒 timeout 被自动回滚；事务耗时、锁等待和慢查询边界 MUST 由调用方显式 deadline 或数据库 timeout 策略控制。
 
 #### Scenario: policy revision counter 锁等待超过 5 秒仍按策略完成
 - **WHEN** RBAC policy 写事务在分配单调 revision 时等待固定 `rbac_policy_revision_counters` 行锁超过 `DefaultTransactionCleanupTimeout`

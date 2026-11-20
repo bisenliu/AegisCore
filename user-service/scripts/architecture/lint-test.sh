@@ -11,7 +11,7 @@ set -euo pipefail
 #   - 脚本会在系统临时目录创建一个最小 Git fixture 仓库，结束时自动删除。
 #
 # 行为：
-#   - 构造 common、user-service、tools/openapi-convert、CI workflow、deployments 和 openspec 的最小目录。
+#   - 构造 platform、user-service、tools/openapi-convert、CI workflow、deployments 和 openspec 的最小目录。
 #   - 写入一组故意违规的 Go 文件和配置，用来覆盖 mock build tag、测试钩子、默认 logger、Fx/Dig 元数据等检查。
 #   - Go import 分层规则由 `.golangci.yml` 的 depguard 覆盖，不在本 fixture 中断言。
 #   - 通过 --repo-root 让 architecture/lint.sh 针对 fixture 运行，而不是扫描真实仓库。
@@ -33,10 +33,10 @@ trap 'rm -rf "${fixture_root}"' EXIT
 mkdir -p \
   "${fixture_root}/.github/workflows" \
   "${fixture_root}/.github/actions/setup-go" \
-  "${fixture_root}/common" \
-  "${fixture_root}/common/runtime/observability/metrics" \
-  "${fixture_root}/common/runtime/example" \
-  "${fixture_root}/common/testing/example" \
+  "${fixture_root}/platform" \
+  "${fixture_root}/platform/runtime/observability/metrics" \
+  "${fixture_root}/platform/runtime/example" \
+  "${fixture_root}/platform/testing/example" \
   "${fixture_root}/deployments/docker" \
   "${fixture_root}/deployments/compose" \
   "${fixture_root}/deployments/helm/aegiscore-user-service/templates" \
@@ -59,9 +59,9 @@ mkdir -p \
   "${fixture_root}/user-service/migrations" \
   "${fixture_root}/user-service/scripts"
 
-# 步骤 5：写入 common/go.mod，作为 Go 版本一致性检查的参照模块。
-cat > "${fixture_root}/common/go.mod" <<'EOF'
-module github.com/aegiscore/common
+# 步骤 5：写入 platform/go.mod，作为 Go 版本一致性检查的参照模块。
+cat > "${fixture_root}/platform/go.mod" <<'EOF'
+module github.com/aegiscore/platform
 
 go 1.27.4
 EOF
@@ -73,7 +73,7 @@ go 1.27.4
 toolchain go1.27.4
 
 use (
-	./common
+	./platform
 	./tools/openapi-convert
 	./tools/nacos-config-seed
 	./user-service
@@ -234,21 +234,21 @@ import _ "github.com/aegiscore/user-service/internal/features/auth/transport/htt
 EOF
 
 # 步骤 22：写入缺少 generate build tag 的 mock_generate.go，覆盖 mock 生成入口检查。
-cat > "${fixture_root}/common/runtime/example/mock_generate.go" <<'EOF'
+cat > "${fixture_root}/platform/runtime/example/mock_generate.go" <<'EOF'
 package example
 
 //go:generate go tool mockgen -destination=mock_test.go -package=example example.org/project Port
 EOF
 
 # 步骤 23：写入 root-level Ent import 违规样例，覆盖 Ent 私有边界检查。
-cat > "${fixture_root}/common/runtime/example/root_ent_import.go" <<'EOF'
+cat > "${fixture_root}/platform/runtime/example/root_ent_import.go" <<'EOF'
 package example
 
 import _ "github.com/aegiscore/user-service/ent"
 EOF
 
-# 步骤 24：写入 common metrics 业务语义违规样例，覆盖 common 观测 primitive 边界检查。
-cat > "${fixture_root}/common/runtime/observability/metrics/casbin_reload.go" <<'EOF'
+# 步骤 24：写入 platform metrics 业务语义违规样例，覆盖 platform 观测 primitive 边界检查。
+cat > "${fixture_root}/platform/runtime/observability/metrics/casbin_reload.go" <<'EOF'
 package metrics
 
 const casbinReloadsMetricName = "aegiscore_casbin_policy_reloads_total"
@@ -359,7 +359,7 @@ package infrastructure
 import (
 	"context"
 
-	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/platform/runtime/logger"
 )
 
 func useDefaultLogger() {
@@ -385,8 +385,8 @@ package application
 func setRequestForTest() {}
 EOF
 
-# 步骤 37：写入 common/testing 白名单样例，确认测试基础设施中的 ForTest 命名不会误报。
-cat > "${fixture_root}/common/testing/example/helper.go" <<'EOF'
+# 步骤 37：写入 platform/testing 白名单样例，确认测试基础设施中的 ForTest 命名不会误报。
+cat > "${fixture_root}/platform/testing/example/helper.go" <<'EOF'
 package example
 
 func NewStoreForTest() {}
@@ -492,9 +492,9 @@ if [[ "${output}" != *"feature application/domain production code must not carry
   exit 1
 fi
 
-# 步骤 53：断言 common metrics 中的服务或 RBAC 业务语义违规被报告。
-if [[ "${output}" != *"common runtime metrics must not contain service or RBAC business metrics semantics"* ]]; then
-  printf 'architecture-lint-test: expected common metrics business semantics violation report\n%s\n' "${output}" >&2
+# 步骤 53：断言 platform metrics 中的服务或 RBAC 业务语义违规被报告。
+if [[ "${output}" != *"platform runtime metrics must not contain service or RBAC business metrics semantics"* ]]; then
+  printf 'architecture-lint-test: expected platform metrics business semantics violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
@@ -523,7 +523,7 @@ if [[ "${output}" != *"fixed feature route_registrar.go files are forbidden"* ]]
 fi
 
 # 步骤 58：断言白名单文件不进入违规结果；覆盖测试文件、测试 helper、Ent/OpenAPI 生成目录和 feature 组合入口。
-if [[ "${output}" == *"allowed_test.go"* || "${output}" == *"common/testing/example/helper.go"* || "${output}" == *"user-service/internal/persistence/ent/schema/generated.go"* || "${output}" == *"user-service/docs/openapi.go"* || "${output}" == *"user-service/internal/features/role/fx.go"* || "${output}" == *"user-service/internal/features/user/fx.go"* || "${output}" == *"user-service/internal/features/user/infrastructure/postgres/store_test.go"* || "${output}" == *"user-service/internal/features/user/transport/http/mock_generate.go"* ]]; then
+if [[ "${output}" == *"allowed_test.go"* || "${output}" == *"platform/testing/example/helper.go"* || "${output}" == *"user-service/internal/persistence/ent/schema/generated.go"* || "${output}" == *"user-service/docs/openapi.go"* || "${output}" == *"user-service/internal/features/role/fx.go"* || "${output}" == *"user-service/internal/features/user/fx.go"* || "${output}" == *"user-service/internal/features/user/infrastructure/postgres/store_test.go"* || "${output}" == *"user-service/internal/features/user/transport/http/mock_generate.go"* ]]; then
   printf 'architecture-lint-test: excluded test or generated file produced a false positive\n%s\n' "${output}" >&2
   exit 1
 fi

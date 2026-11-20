@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
 	"github.com/aegiscore/user-service/internal/messages"
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )

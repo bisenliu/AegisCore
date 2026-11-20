@@ -10,12 +10,12 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	commonmw "github.com/aegiscore/common/http/middleware"
-	commonroute "github.com/aegiscore/common/http/route"
-	"github.com/aegiscore/common/runtime/config"
-	commonlogger "github.com/aegiscore/common/runtime/logger"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	platformmw "github.com/aegiscore/platform/http/middleware"
+	platformroute "github.com/aegiscore/platform/http/route"
+	"github.com/aegiscore/platform/runtime/config"
+	platformlogger "github.com/aegiscore/platform/runtime/logger"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
+	platformtracing "github.com/aegiscore/platform/runtime/observability/tracing"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	"github.com/aegiscore/user-service/internal/router"
 )
@@ -39,8 +39,8 @@ type GinParams struct {
 	ModeConfigured GinModeConfigured
 	Config         *config.Config
 	Log            *zap.Logger
-	Metrics        *commonmetrics.Provider
-	Trace          *commontracing.Provider
+	Metrics        *platformmetrics.Provider
+	Trace          *platformtracing.Provider
 	HTTP           serviceconfig.HTTPSettings
 }
 
@@ -50,7 +50,7 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 	if params.Trace == nil {
 		return nil, fmt.Errorf("tracing provider is required")
 	}
-	bodyLimit, err := commonmw.RequestBodyLimit(params.HTTP.RequestBodyMaxBytes)
+	bodyLimit, err := platformmw.RequestBodyLimit(params.HTTP.RequestBodyMaxBytes)
 	if err != nil {
 		return nil, fmt.Errorf("configure request body limit: %w", err)
 	}
@@ -64,18 +64,18 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 			otelgin.WithPropagators(params.Trace.TextMapPropagator()),
 		),
 		renameHTTPServerSpan(),
-		commonmw.RequestID(),
+		platformmw.RequestID(),
 		requestLoggerContext(params.Log),
-		commonmw.HTTPServerMetrics(commonmw.HTTPMetricsOptions{
+		platformmw.HTTPServerMetrics(platformmw.HTTPMetricsOptions{
 			Provider:   params.Metrics,
 			Skip:       skipMetricsScrapeRequest(params.Config.Observability.Metrics),
 			SkipResult: skipSuccessfulRuntimeEndpointMetrics(params.Config.Observability.Metrics),
 		}),
-		commonmw.Recovery(params.Log),
-		commonmw.RequestLoggerWithOptions(params.Log, commonmw.RequestLoggerOptions{Skip: skipSuccessfulRuntimeEndpointLog(params.Config.Observability.Metrics)}),
+		platformmw.Recovery(params.Log),
+		platformmw.RequestLoggerWithOptions(params.Log, platformmw.RequestLoggerOptions{Skip: skipSuccessfulRuntimeEndpointLog(params.Config.Observability.Metrics)}),
 	}
 	if params.HTTP.CORS.Enabled {
-		middlewares = append(middlewares, commonmw.CORSWithOptions(params.HTTP.CORS.ToOptions()))
+		middlewares = append(middlewares, platformmw.CORSWithOptions(params.HTTP.CORS.ToOptions()))
 	}
 	middlewares = append(middlewares, bodyLimit)
 	engine.Use(middlewares...)
@@ -85,7 +85,7 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 // requestLoggerContext 将带有当前请求流水号的日志工具存入请求上下文中，方便后续业务打印日志时自动关联。
 func requestLoggerContext(log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Request = c.Request.WithContext(commonlogger.ToContext(c.Request.Context(), log))
+		c.Request = c.Request.WithContext(platformlogger.ToContext(c.Request.Context(), log))
 		c.Next()
 	}
 }
@@ -93,21 +93,21 @@ func requestLoggerContext(log *zap.Logger) gin.HandlerFunc {
 // skipSuccessfulRuntimeEndpointLog 判断频繁的心跳探针与监控拉取请求在成功时是否需要跳过打印日志，防止大量无意义访问日志淹没正常业务。
 func skipSuccessfulRuntimeEndpointLog(metricsCfg config.MetricsConfig) func(*gin.Context) bool {
 	return func(c *gin.Context) bool {
-		return c.Writer.Status() < 400 && router.IsLowNoiseRuntimeRoute(commonroute.TemplateOrUnmatched(c), metricsCfg)
+		return c.Writer.Status() < 400 && router.IsLowNoiseRuntimeRoute(platformroute.TemplateOrUnmatched(c), metricsCfg)
 	}
 }
 
 // skipMetricsScrapeRequest 判断当前请求是否属于监控系统定时拉取数据，避免为监控数据拉取本身重复记日志。
 func skipMetricsScrapeRequest(metricsCfg config.MetricsConfig) func(*gin.Context) bool {
 	return func(c *gin.Context) bool {
-		return router.IsMetricsRoute(commonroute.TemplateOrUnmatched(c), metricsCfg)
+		return router.IsMetricsRoute(platformroute.TemplateOrUnmatched(c), metricsCfg)
 	}
 }
 
 // skipSuccessfulRuntimeEndpointMetrics 判断健康检查等系统探针在成功时是否跳过记入普通业务请求耗时统计。
 func skipSuccessfulRuntimeEndpointMetrics(metricsCfg config.MetricsConfig) func(*gin.Context) bool {
 	return func(c *gin.Context) bool {
-		return c.Writer.Status() < http.StatusBadRequest && router.IsLowNoiseRuntimeRoute(commonroute.TemplateOrUnmatched(c), metricsCfg)
+		return c.Writer.Status() < http.StatusBadRequest && router.IsLowNoiseRuntimeRoute(platformroute.TemplateOrUnmatched(c), metricsCfg)
 	}
 }
 
@@ -124,5 +124,5 @@ func renameHTTPServerSpan() gin.HandlerFunc {
 
 // httpServerSpanName 根据请求方式和规范路径生成标准化的调用链路节点名称。
 func httpServerSpanName(c *gin.Context) string {
-	return c.Request.Method + " " + commonroute.TemplateOrUnmatched(c)
+	return c.Request.Method + " " + platformroute.TemplateOrUnmatched(c)
 }

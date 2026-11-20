@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	commonauth "github.com/aegiscore/common/security/auth"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
@@ -75,7 +75,7 @@ func TestTokenVersionValidatorRejectsStaleTokenUsingMiniredisCache(t *testing.T)
 	validator := newTestTokenVersionValidator(t, users, store)
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 8)
-	require.ErrorIs(t, err, commonauth.ErrTokenVersionMismatch,
+	require.ErrorIs(t, err, platformauth.ErrTokenVersionMismatch,
 		"err = %v, want token version mismatch", err)
 
 }
@@ -113,7 +113,7 @@ func TestTokenVersionCacheRefreshMakesStaleTokenObservable(t *testing.T) {
 	validator := newTestTokenVersionValidator(t, users, store)
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 5)
-	require.ErrorIs(t, err, commonauth.ErrTokenVersionMismatch,
+	require.ErrorIs(t, err, platformauth.ErrTokenVersionMismatch,
 		"err = %v, want token version mismatch", err)
 
 	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID)

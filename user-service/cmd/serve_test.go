@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
-	commonconfig "github.com/aegiscore/common/runtime/config"
+	platformconfig "github.com/aegiscore/platform/runtime/config"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	configtestkit "github.com/aegiscore/user-service/internal/config/testkit"
 )
@@ -230,6 +230,6 @@ resources:
       db_name: aegiscore_user
 `
 	return func(context.Context) (*serviceconfig.LoadResult, error) {
-		return configtestkit.LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "user-service.yaml", Content: []byte(content)}})
+		return configtestkit.LoadFromDocuments([]platformconfig.ConfigDocument{{DataID: "user-service.yaml", Content: []byte(content)}})
 	}
 }

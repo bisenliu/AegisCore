@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 
-	commonresponse "github.com/aegiscore/common/http/response"
-	"github.com/aegiscore/common/runtime/config"
+	platformresponse "github.com/aegiscore/platform/http/response"
+	"github.com/aegiscore/platform/runtime/config"
 )
 
 func TestNewGinEngineCreatesOTelServerSpan(t *testing.T) {
@@ -102,7 +102,7 @@ func TestNewGinEngineMarksServerErrorSpanStatus(t *testing.T) {
 	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
-	failResponse := commonresponse.Fail
+	failResponse := platformresponse.Fail
 	engine.GET("/api/v1/fail", func(c *gin.Context) {
 		failResponse(c, errors.New("database password token"))
 	})
@@ -123,7 +123,7 @@ func TestNewGinEngineDoesNotMarkClientErrorSpanStatus(t *testing.T) {
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 	engine.GET("/api/v1/bad-request", func(c *gin.Context) {
-		commonresponse.BadRequest(c, "请求格式错误")
+		platformresponse.BadRequest(c, "请求格式错误")
 	})
 
 	recorderHTTP := httptest.NewRecorder()

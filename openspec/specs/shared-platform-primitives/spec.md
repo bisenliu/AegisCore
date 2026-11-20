@@ -1,14 +1,14 @@
 ## Purpose
 
-定义 `common/` 提供的跨服务共享契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力，保证服务间基础行为一致且业务边界清晰。
+定义 `platform/` 提供的跨服务共享契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力，保证服务间基础行为一致且业务边界清晰。
 ## Requirements
 ### Requirement: 跨服务 UUID 使用 Go 标准库
 
-`common/runtime/id` 对外提供的 UUID 值 MUST 使用 Go 标准库 `uuid.UUID`，默认生成 MUST 保持 UUID v7；现有返回 error 的导出函数签名 MUST 保持可调用。项目一方 Go 代码 MUST 使用标准库 `uuid` 表达和解析 UUID，不得通过第三方 UUID 类型维护并行 ID 契约。
+`platform/runtime/id` 对外提供的 UUID 值 MUST 使用 Go 标准库 `uuid.UUID`，默认生成 MUST 保持 UUID v7；现有返回 error 的导出函数签名 MUST 保持可调用。项目一方 Go 代码 MUST 使用标准库 `uuid` 表达和解析 UUID，不得通过第三方 UUID 类型维护并行 ID 契约。
 
 #### Scenario: 默认生成 ID
 
-- **WHEN** 调用 `common/runtime/id` 的 UUID 或 UUID 字符串生成函数
+- **WHEN** 调用 `platform/runtime/id` 的 UUID 或 UUID 字符串生成函数
 - **THEN** 返回值 MUST 是有效 UUID v7，字符串 MUST 保持小写、带连字符的规范格式
 
 #### Scenario: UUID 在服务边界往返
@@ -19,17 +19,17 @@
 
 ### Requirement: 跨服务 HTTP 契约与 helper
 
-系统 MUST 在 `common/contract` 中维护业务中立的应用错误、响应 envelope 和分页契约，由 `common/http/response` 统一完成 HTTP 渲染，并 MUST 在 `common/http` 和 `common/validation` 中提供行为一致、业务中立的入站绑定、字段校验、认证授权 middleware、CORS、metrics、logging、recovery、OpenAPI 和轻量出站请求能力。应用错误 MUST 使用低基数 `Kind`、稳定 `Reason`、响应 `Code`、公开 `Message` 和可选内部 `Cause` 表达语义，MUST NOT 保存或接收 HTTP status；HTTP status MUST 只根据 `Kind` 推导。
+系统 MUST 在 `platform/contract` 中维护业务中立的应用错误、响应 envelope 和分页契约，由 `platform/http/response` 统一完成 HTTP 渲染，并 MUST 在 `platform/http` 和 `platform/validation` 中提供行为一致、业务中立的入站绑定、字段校验、认证授权 middleware、CORS、metrics、logging、recovery、OpenAPI 和轻量出站请求能力。应用错误 MUST 使用低基数 `Kind`、稳定 `Reason`、响应 `Code`、公开 `Message` 和可选内部 `Cause` 表达语义，MUST NOT 保存或接收 HTTP status；HTTP status MUST 只根据 `Kind` 推导。
 
 #### Scenario: 响应、错误归一化与 HTTP 映射
 
 - **WHEN** 服务返回成功、分页或错误响应
-- **THEN** 系统 MUST 使用共享 envelope 表达 `success`、`code`、`message`、`data`、`pagination` 或结构化错误详情，新服务 MUST 优先复用 `common/contract` 和 `common/http/response`，不得定义不兼容的 envelope
+- **THEN** 系统 MUST 使用共享 envelope 表达 `success`、`code`、`message`、`data`、`pagination` 或结构化错误详情，新服务 MUST 优先复用 `platform/contract` 和 `platform/http/response`，不得定义不兼容的 envelope
 - **WHEN** 系统创建、包装或通过 `FromError` 归一化错误
 - **THEN** wrapped application error MUST 保留原始 `Kind`、`Reason`、`Code` 和公开 `Message`
 - **AND** nil 或未知错误 MUST 归一化为使用非敏感公开消息的内部错误，原始错误只能作为内部 `Cause` 保留
 - **AND** `errors.As` MUST 能解析应用错误，`errors.Is` MUST 按稳定 `Kind`、`Reason` 或内部 `Cause` 语义匹配
-- **WHEN** `common/http/response` 写入应用错误响应
+- **WHEN** `platform/http/response` 写入应用错误响应
 - **THEN** 请求格式或字段校验错误 MUST 渲染为 `400 Bad Request`
 - **AND** 未认证或 token 无效、过期、撤销 MUST 渲染为 `401 Unauthorized`
 - **AND** 权限不足、未找到、冲突和服务不可用 MUST 分别渲染为 `403 Forbidden`、`404 Not Found`、`409 Conflict` 和 `503 Service Unavailable`
@@ -40,7 +40,7 @@
 - **WHEN** HTTP 请求被 Gin 路由处理
 - **THEN** 服务 MUST 能复用共享 middleware 完成认证上下文、授权检查、日志字段、metrics、panic recovery 和 span error 记录
 - **WHEN** HTTP handler 绑定请求或校验字段
-- **THEN** `common/validation`、`common/http/binding` 和 response helper MUST 生成或传播语义应用错误，并返回一致的字段名、公开消息和结构化字段错误明细
+- **THEN** `platform/validation`、`platform/http/binding` 和 response helper MUST 生成或传播语义应用错误，并返回一致的字段名、公开消息和结构化字段错误明细
 - **AND** validation tag 的字段名解析顺序 MUST 保持稳定
 - **WHEN** 调用方使用 `Created` 或 `NoContent` 写入响应
 - **THEN** `Created` MUST 返回包含统一成功 envelope 和调用方 `data` 的 `201 Created`，`NoContent` MUST 返回 body 为空的 `204 No Content`
@@ -64,15 +64,15 @@
 #### Scenario: 超限错误使用统一响应契约
 
 - **WHEN** 共享 HTTP helper、middleware 或 binder 产生请求体超限错误
-- **THEN** `common/http/response` MUST 渲染 `413 Payload Too Large`
+- **THEN** `platform/http/response` MUST 渲染 `413 Payload Too Large`
 - **AND** 响应 MUST 使用统一错误 envelope、稳定应用错误码和非敏感公开消息
 - **AND** 系统 MUST NOT 将请求体超限渲染为 `400 Bad Request`、`429 Too Many Requests` 或 `500 Internal Server Error`
 
-#### Scenario: common 不拥有服务私有策略
+#### Scenario: platform 不拥有服务私有策略
 
 - **WHEN** 消费服务需要默认请求体上限、端点覆盖或路径匹配策略
 - **THEN** 这些策略 MUST 由消费服务拥有
-- **AND** `common` MUST NOT 内置 user-service 路由、auth/user DTO、部署资源预算或服务私有配置字段
+- **AND** `platform` MUST NOT 内置 user-service 路由、auth/user DTO、部署资源预算或服务私有配置字段
 
 #### Scenario: 业务中立的出站 HTTP 请求
 
@@ -103,40 +103,40 @@
 #### Scenario: 业务语义与 OpenAPI 留在所属边界
 
 - **WHEN** auth、permission、role 或 `internal/shared/identity` 定义稳定业务错误
-- **THEN** owning domain MUST 为错误提供共享契约要求的 `Kind`、`Reason`、`Code` 和公开 `Message`，保持 `errors.Is` 匹配语义，并使 `common/http/response.Fail` 能直接渲染该错误
-- **AND** 系统 MUST NOT 在 `common`、跨 feature 全局包或 HTTP transport 中维护重复的业务错误映射表
-- **AND** `CodePasswordChangeRequired` 的数值 MUST 保持为 `20006`，但 `common` MUST NOT 承载 user-service 的状态判断、token 签发或登录编排
+- **THEN** owning domain MUST 为错误提供共享契约要求的 `Kind`、`Reason`、`Code` 和公开 `Message`，保持 `errors.Is` 匹配语义，并使 `platform/http/response.Fail` 能直接渲染该错误
+- **AND** 系统 MUST NOT 在 `platform`、跨 feature 全局包或 HTTP transport 中维护重复的业务错误映射表
+- **AND** `CodePasswordChangeRequired` 的数值 MUST 保持为 `20006`，但 `platform` MUST NOT 承载 user-service 的状态判断、token 签发或登录编排
 - **WHEN** 授权依赖 user-service 的 subject schema、角色、权限目录、route diff 或超级管理员基线
-- **THEN** 行为 MUST 留在 user-service permission 或 shared 边界，不得进入通用 HTTP middleware 或 `common/security/casbin`
+- **THEN** 行为 MUST 留在 user-service permission 或 shared 边界，不得进入通用 HTTP middleware 或 `platform/security/casbin`
 - **WHEN** 服务生成、转换或嵌入 OpenAPI 文档
-- **THEN** 系统 MUST 复用 `common/http/openapi` 的规范化、序列化和 Go embed 渲染能力，API server、认证方案、扫描范围、健康路径和输出目录等服务元数据 MUST 留在服务脚本或薄 wrapper
+- **THEN** 系统 MUST 复用 `platform/http/openapi` 的规范化、序列化和 Go embed 渲染能力，API server、认证方案、扫描范围、健康路径和输出目录等服务元数据 MUST 留在服务脚本或薄 wrapper
 
 ### Requirement: 共享安全原语
 
-系统 MUST 在 `common/security` 中提供业务中立的 JWT 验证、Bearer token 处理、Casbin 请求三元组授权和 bcrypt 密码哈希原语，MUST NOT 固定 user-service 的 claims schema、token subject、会话撤销或业务授权模型。
+系统 MUST 在 `platform/security` 中提供业务中立的 JWT 验证、Bearer token 处理、Casbin 请求三元组授权和 bcrypt 密码哈希原语，MUST NOT 固定 user-service 的 claims schema、token subject、会话撤销或业务授权模型。
 
 #### Scenario: JWT 与 Casbin 使用最小业务中立接口
 
 - **WHEN** 服务创建共享 JWT 认证 middleware
 - **THEN** middleware constructor MUST 只接收 logger、访问令牌 verifier 和可选 token version validator，MUST NOT 依赖 token issuer、服务私有配置或具备签发能力的 concrete service
 - **AND** access token claims、subject 和业务字段校验 MUST 由服务私有 verifier adapter 拥有
-- **AND** `common/security/auth` MUST NOT 提供 access、refresh 或 password-change token 签发入口，也 MUST NOT 定义 user-service 专属 subject 或 claims
+- **AND** `platform/security/auth` MUST NOT 提供 access、refresh 或 password-change token 签发入口，也 MUST NOT 定义 user-service 专属 subject 或 claims
 - **WHEN** 调用方需要获得 Casbin 三元组授权的原始结果
-- **THEN** `common/security/casbin.Enforce` MUST 返回 `bool` 和 `error`，拒绝访问到 `ErrDenied` 的转换 MUST 由 `Authorizer.Authorize` 或调用方显式处理
+- **THEN** `platform/security/casbin.Enforce` MUST 返回 `bool` 和 `error`，拒绝访问到 `ErrDenied` 的转换 MUST 由 `Authorizer.Authorize` 或调用方显式处理
 
 #### Scenario: bcrypt 密码哈希、校验与输入边界
 
 - **WHEN** 服务、CLI 或测试需要执行密码哈希或校验
 - **THEN** 调用方 MUST 显式创建 bcrypt 密码服务实例
-- **AND** `common/security/password` MUST 使用固定 bcrypt cost 生成新密码哈希，初始 cost MUST 为 `12`
-- **AND** `common/security/password` MUST 使用 bcrypt 校验已编码的密码哈希，非 bcrypt、格式非法或无法解析的哈希 MUST 被拒绝
-- **AND** `common/security/password` MUST NOT 验证、迁移、fallback 或 rehash Argon2id 密码哈希，也 MUST NOT 暴露包级哈希、校验或可变算法配置入口
+- **AND** `platform/security/password` MUST 使用固定 bcrypt cost 生成新密码哈希，初始 cost MUST 为 `12`
+- **AND** `platform/security/password` MUST 使用 bcrypt 校验已编码的密码哈希，非 bcrypt、格式非法或无法解析的哈希 MUST 被拒绝
+- **AND** `platform/security/password` MUST NOT 验证、迁移、fallback 或 rehash Argon2id 密码哈希，也 MUST NOT 暴露包级哈希、校验或可变算法配置入口
 - **WHEN** 调用方提交空明文密码或超过 bcrypt 安全输入上限的明文密码
-- **THEN** `common/security/password` MUST 在执行 bcrypt 前拒绝该输入，空密码和超长密码 MUST 分别返回可匹配的 `password.ErrEmptyPassword` 和 `password.ErrPasswordTooLong`
+- **THEN** `platform/security/password` MUST 在执行 bcrypt 前拒绝该输入，空密码和超长密码 MUST 分别返回可匹配的 `password.ErrEmptyPassword` 和 `password.ErrPasswordTooLong`
 
 ### Requirement: Runtime 配置、具名资源与生命周期
 
-系统 MUST 在 `common/runtime/config` 中维护跨服务 runtime 配置、默认值和通用校验，在 `common/runtime/resources` 中维护具名 Redis/PostgreSQL 资源类型、默认值和通用校验，并由 `common/runtime/datastore` 使用共享资源类型初始化 framework-neutral 的单资源连接池。服务私有业务配置、必需资源名、业务用途和配置 map 到真实资源的选择 MUST 由消费服务拥有；constructor 部分失败、启动探测失败或 instrumentation 失败时 MUST 清理已创建资源并保留主错误和清理错误。
+系统 MUST 在 `platform/runtime/config` 中维护跨服务 runtime 配置、默认值和通用校验，在 `platform/runtime/resources` 中维护具名 Redis/PostgreSQL 资源类型、默认值和通用校验，并由 `platform/runtime/datastore` 使用共享资源类型初始化 framework-neutral 的单资源连接池。服务私有业务配置、必需资源名、业务用途和配置 map 到真实资源的选择 MUST 由消费服务拥有；constructor 部分失败、启动探测失败或 instrumentation 失败时 MUST 清理已创建资源并保留主错误和清理错误。
 
 #### Scenario: 严格加载并校验通用配置
 
@@ -156,10 +156,10 @@
 #### Scenario: 服务私有配置与单一配置来源
 
 - **WHEN** 服务需要 `auth`、`ent`、JWT TTL、refresh session、token version、RBAC 或 production-like secret 校验
-- **THEN** 服务私有 loader MUST 负责解析和校验，`common/runtime/config` MUST NOT 声明或校验这些业务配置，服务私有配置 MUST NOT 声明、读取或兼容旧 `auth.password_kdf` 配置
+- **THEN** 服务私有 loader MUST 负责解析和校验，`platform/runtime/config` MUST NOT 声明或校验这些业务配置，服务私有配置 MUST NOT 声明、读取或兼容旧 `auth.password_kdf` 配置
 - **WHEN** user-service 正式 `serve` 启动或装配测试构建 Fx App
 - **THEN** CLI MUST 在创建 App 前只解析并校验一次 service config，composition root MUST supply 同一个 service config 及由其派生的 runtime config，不得再次读取配置文件
-- **AND** `common/runtime/config` MUST NOT 通过 Fx provider 接受配置路径或重复调用共享 loader，配置失败 MUST 在创建 App、资源或 lifecycle hook 前返回
+- **AND** `platform/runtime/config` MUST NOT 通过 Fx provider 接受配置路径或重复调用共享 loader，配置失败 MUST 在创建 App、资源或 lifecycle hook 前返回
 
 #### Scenario: 声明、校验并选择具名资源
 
@@ -176,10 +176,10 @@
 - **AND** 普通 Go constructor 和 Fx constructor MUST 一次只创建一个 client，且 MUST NOT 接收或遍历 `RedisConfigs`
 - **AND** 启动 PING 或 tracing instrumentation 失败时 provider MUST 关闭 client，并保留探测、instrumentation 和关闭失败信息
 - **WHEN** 调用方使用资源名称和一份 `PostgresConfig` 构造 PostgreSQL 资源
-- **THEN** `common/runtime/datastore` MUST 一次只创建一个连接池并应用稳定的 DSN、SSL 和 pool 默认值，constructor MUST NOT 接收 `PostgresConfigs`、`fx.Lifecycle` 或其他 DI framework 类型
+- **THEN** `platform/runtime/datastore` MUST 一次只创建一个连接池并应用稳定的 DSN、SSL 和 pool 默认值，constructor MUST NOT 接收 `PostgresConfigs`、`fx.Lifecycle` 或其他 DI framework 类型
 - **AND** datastore MUST 提供接收资源名称和 `*sql.DB` 的启动 `Ping` 与 `Close` 契约；启动 `Ping` 失败时 MUST 使用稳定的单资源 ping timeout、关闭同一连接池并同时保留具名探测错误和关闭错误；关闭时 MUST 只关闭该单个连接池且错误 MUST 包含资源名称
 - **WHEN** Fx 服务声明一个具名 Redis 或 PostgreSQL 资源
-- **THEN** `common/runtime/datastore` 中共置的 Fx adapter MUST 调用 framework-neutral 的单资源 constructor，只注册该资源的启动探测和关闭 hook，MUST NOT 遍历具名资源 map 或自动创建其他资源
+- **THEN** `platform/runtime/datastore` 中共置的 Fx adapter MUST 调用 framework-neutral 的单资源 constructor，只注册该资源的启动探测和关闭 hook，MUST NOT 遍历具名资源 map 或自动创建其他资源
 - **AND** `OnStart` 创建的资源 MUST 由 `OnStop` 或 Fx rollback 关闭，constructor 阶段已创建的部分资源 MUST 在后续失败时立即清理
 - **AND** feature 关闭自身 workerpool、watcher、cache 或 store 时 MUST NOT 关闭共享 Redis、Ent 或 PostgreSQL 资源
 
@@ -214,7 +214,7 @@
 
 ### Requirement: Runtime 执行与装配原语
 
-系统 MUST 在 `common/runtime` 中提供业务中立的 ID、scheduler、workerpool、localcache、Redis key、timezone、logger、Fx provider 和依赖图原语。拥有后台执行的 primitive MUST 具有明确的容量、并发、失败处理、观测和关闭语义；localcache MUST NOT 拥有后台执行或关闭生命周期。构造函数、provider 和 Fx graph helper MUST 只消费真实运行时依赖或调用方显式提供的无副作用 Fx option，MUST NOT 为测试便利暴露生产 API 或读取服务私有配置。公开 provider 名称 MUST 表达其 runtime 能力或资源职责，MUST NOT 仅用模糊的 DI framework 术语隐藏能力语义。
+系统 MUST 在 `platform/runtime` 中提供业务中立的 ID、scheduler、workerpool、localcache、Redis key、timezone、logger、Fx provider 和依赖图原语。拥有后台执行的 primitive MUST 具有明确的容量、并发、失败处理、观测和关闭语义；localcache MUST NOT 拥有后台执行或关闭生命周期。构造函数、provider 和 Fx graph helper MUST 只消费真实运行时依赖或调用方显式提供的无副作用 Fx option，MUST NOT 为测试便利暴露生产 API 或读取服务私有配置。公开 provider 名称 MUST 表达其 runtime 能力或资源职责，MUST NOT 仅用模糊的 DI framework 术语隐藏能力语义。
 
 #### Scenario: workerpool 生命周期
 
@@ -308,7 +308,7 @@
 #### Scenario: loading cache TTL、容量、统计与值所有权
 
 - **WHEN** cache 存储或返回 slice、map、pointer 或包含引用字段的 value
-- **THEN** common MUST NOT 执行业务 deep clone，消费 feature MUST 在 loader 写入和返回调用方的适当边界复制可变 value
+- **THEN** platform MUST NOT 执行业务 deep clone，消费 feature MUST 在 loader 写入和返回调用方的适当边界复制可变 value
 - **WHEN** cache 运行
 - **THEN** cache MUST 使用固定 TTL、强制正数容量和命中不 touch 的策略，MUST NOT 使用 `ttlcache.WithLoader`、`ttlcache.NewSuppressedLoader` 或 `ttlcache.Cache.Start`，也 MUST NOT 创建定时清理 goroutine
 - **AND** 过期 item MUST 在读取时逻辑失效，并在成功写入前通过 `DeleteExpired` 惰性清理；物理 item 数 MUST 始终受配置容量约束
@@ -321,10 +321,10 @@
 #### Scenario: Redis key、timezone 与 logger 归属
 
 - **WHEN** feature 需要 refresh session、token version、RBAC 或其他业务 Redis key
-- **THEN** feature infrastructure MUST 拥有业务 key schema，并只能复用 `common/runtime/rediskey` 的通用构造规则
+- **THEN** feature infrastructure MUST 拥有业务 key schema，并只能复用 `platform/runtime/rediskey` 的通用构造规则
 - **WHEN** runtime 初始化进程时区
 - **THEN** timezone primitive MUST 使用调用方从 `runtime.timezone` 配置派生并显式传入的有效 IANA 时区初始化 `time.Local`，MUST NOT 读取或修改平台 `TZ` 环境变量，也 MUST NOT 直接依赖核心 Config 类型
-- **AND** 如果通过 Fx 初始化，服务 composition root MUST 显式绑定初始化调用或服务级 runtime 初始化函数，common MUST NOT 仅为了包装 `Init` 暴露无额外运行时职责的 Fx provider
+- **AND** 如果通过 Fx 初始化，服务 composition root MUST 显式绑定初始化调用或服务级 runtime 初始化函数，platform MUST NOT 仅为了包装 `Init` 暴露无额外运行时职责的 Fx provider
 - **WHEN** 调用方通过 `logger.New`、`NewWithConfig` 或 Fx provider `NewLogger` 创建 logger
 - **THEN** 系统 MUST 返回由调用方拥有的 logger，Fx provider MUST 注册既有 Sync 关闭 hook；构造过程 MUST NOT 隐式安装、覆盖或恢复进程级默认 logger
 - **AND** 默认 logger 只能通过显式 `SetDefault` 修改，并 MAY 作为未注入 logger 时的兜底
@@ -332,23 +332,23 @@
 #### Scenario: 共享 provider、fxgraph 与公开 API 边界
 
 - **WHEN** 共享 provider 暴露依赖
-- **THEN** provider MUST 只消费跨服务配置和 primitive，不得导入服务私有配置；公开命名 MUST 能区分 logger、metrics、tracing、datastore 或其他具体 runtime 能力，不得在多个 common 包中重复使用缺少能力语义的通用名称作为主要入口
-- **WHEN** 服务将 Fx option 或 module 传入 `common/runtime/fxgraph`
+- **THEN** provider MUST 只消费跨服务配置和 primitive，不得导入服务私有配置；公开命名 MUST 能区分 logger、metrics、tracing、datastore 或其他具体 runtime 能力，不得在多个 platform 包中重复使用缺少能力语义的通用名称作为主要入口
+- **WHEN** 服务将 Fx option 或 module 传入 `platform/runtime/fxgraph`
 - **THEN** helper MUST 输出稳定排序的 provider、invoke 和依赖关系图文本，只处理调用方显式传入的 graph-safe Fx option，MUST NOT 构造或要求服务私有配置、feature provider、Ent、Redis、PostgreSQL、OTLP 或 HTTP server 输入
 - **AND** helper MUST NOT 通过服务完整 runtime module 间接执行生产 runtime `fx.Invoke`
-- **WHEN** `common/runtime` 新增公开 constructor、method、option 或 hook
-- **THEN** 入口 MUST 具有真实运行时职责或已定义的稳定共享契约；仅测试消费、暴露内部状态或绕过正常 lifecycle 的能力 MUST 留在包内、`_test.go` fixture 或 `common/testing`
-- **AND** 仅包装另一个无参初始化函数且不提供额外资源、配置、错误处理、顺序控制或 lifecycle 语义的 Fx provider MUST NOT 作为 common 公开 API 新增或保留
+- **WHEN** `platform/runtime` 新增公开 constructor、method、option 或 hook
+- **THEN** 入口 MUST 具有真实运行时职责或已定义的稳定共享契约；仅测试消费、暴露内部状态或绕过正常 lifecycle 的能力 MUST 留在包内、`_test.go` fixture 或 `platform/testing`
+- **AND** 仅包装另一个无参初始化函数且不提供额外资源、配置、错误处理、顺序控制或 lifecycle 语义的 Fx provider MUST NOT 作为 platform 公开 API 新增或保留
 
-### Requirement: common、shared 与外部集成边界
+### Requirement: platform、shared 与外部集成边界
 
-系统 MUST 将 `common` 限制为跨服务稳定且业务中立的能力，将 `user-service/internal/shared` 限制为至少两个 feature 真实消费的服务内纯业务内核，并将真实外部协议适配放入 `user-service/internal/integration/http|grpc|events`。
+系统 MUST 将 `platform` 限制为跨服务稳定且业务中立的能力，将 `user-service/internal/shared` 限制为至少两个 feature 真实消费的服务内纯业务内核，并将真实外部协议适配放入 `user-service/internal/integration/http|grpc|events`。
 
-#### Scenario: common 与 shared kernel 准入边界
+#### Scenario: platform 与 shared kernel 准入边界
 
-- **WHEN** 新能力准备放入 `common`
+- **WHEN** 新能力准备放入 `platform`
 - **THEN** 能力 MUST 跨服务可复用、无 user-service 业务语义且具有稳定契约
-- **AND** `common` MUST NOT 依赖 feature 包或承载业务 DTO、业务 key schema、policy loader、route diff、服务 OpenAPI 元数据、eventbus 或 outbox 设计
+- **AND** `platform` MUST NOT 依赖 feature 包或承载业务 DTO、业务 key schema、policy loader、route diff、服务 OpenAPI 元数据、eventbus 或 outbox 设计
 - **WHEN** user/auth 共享身份语义或 role/permission 共享系统 RBAC 基线
 - **THEN** 系统 MUST 分别使用 `internal/shared/identity` 和 `internal/shared/rbacbaseline`
 - **AND** shared 包 MUST 保持纯业务语义，不得依赖 feature、Gin、Ent、Redis、SQL、Fx、runtime provider、HTTP response、DTO、store port、外部调用或部署资产
@@ -365,12 +365,12 @@
 
 ### Requirement: 测试基础设施、Cluster fixture 与隔离
 
-系统 MUST 在 `common/testing` 中提供可复用的 PostgreSQL 与 Redis Cluster 容器 fixture，并使用可重复、可观察且不污染生产 API 或进程全局状态的方式验证共享能力。
+系统 MUST 在 `platform/testing` 中提供可复用的 PostgreSQL 与 Redis Cluster 容器 fixture，并使用可重复、可观察且不污染生产 API 或进程全局状态的方式验证共享能力。
 
 #### Scenario: 可重复且可观察的测试
 
 - **WHEN** Go 测试需要真实 PostgreSQL 或 Redis
-- **THEN** 测试 MUST 优先使用 `common/testing/containers` 管理依赖生命周期，测试数据 MUST 使用稳定 fixture 或 feature-local builder，避免不可重复的随机输入
+- **THEN** 测试 MUST 优先使用 `platform/testing/containers` 管理依赖生命周期，测试数据 MUST 使用稳定 fixture 或 feature-local builder，避免不可重复的随机输入
 - **WHEN** 测试需要注入失败、固定返回、控制顺序或观察后台状态
 - **THEN** 测试 MUST 使用消费侧最小接口、局部 fixture、通道或可观察状态，正式代码 MUST NOT 为测试新增全局可变函数、测试 flag、`NewXForTest` 或无运行时职责的 adapter
 - **WHEN** 测试验证缓存过期、workerpool drain、scheduler overlap/global gate/lock retry/renew/timeout/shutdown 或后台任务取消
@@ -388,18 +388,18 @@
 - **WHEN** 模块容器测试 target 通过 `-args -aegiscore.testcontainers` 启用真实依赖测试
 - **THEN** Redis Cluster 相关集成测试 MUST 实际连接 Cluster fixture 并执行 Cluster-sensitive Redis 命令
 - **AND** Docker daemon、Cluster fixture 启动、slot 初始化或连接失败 MUST 使相关集成测试失败而不是静默跳过
-- **AND** `common/testing/containers` 自身的 PostgreSQL 与 Redis 集成测试 MUST 包含在根 `make test-containers` 门禁中
+- **AND** `platform/testing/containers` 自身的 PostgreSQL 与 Redis 集成测试 MUST 包含在根 `make test-containers` 门禁中
 
 ### Requirement: 显式配置来源与加载管线
 
-系统 MUST 将配置文档来源、文档合成、严格解码和服务配置策略表达为显式边界。`common/runtime/config` MUST 只拥有业务中立的配置 schema、document contract、deep merge、raw digest、strict decode、encode、render、redact 和通用校验原语；具体 Nacos 环境、认证、client、failover 和文档读取 MUST 位于 Nacos source adapter。服务 MUST 显式组合 defaults、normalize 和 validate，shared loader MUST NOT 通过服务类型的隐式接口自动发现这些行为。本地配置目录与 Namespace 的发布选择 MUST 留在 Compose 初始化服务和仓库级发布工具边界，runtime Nacos source MUST NOT 读取或解释仓库目录。
+系统 MUST 将配置文档来源、文档合成、严格解码和服务配置策略表达为显式边界。`platform/runtime/config` MUST 只拥有业务中立的配置 schema、document contract、deep merge、raw digest、strict decode、encode、render、redact 和通用校验原语；具体 Nacos 环境、认证、client、failover 和文档读取 MUST 位于 Nacos source adapter。服务 MUST 显式组合 defaults、normalize 和 validate，shared loader MUST NOT 通过服务类型的隐式接口自动发现这些行为。本地配置目录与 Namespace 的发布选择 MUST 留在 Compose 初始化服务和仓库级发布工具边界，runtime Nacos source MUST NOT 读取或解释仓库目录。
 
 #### Scenario: Nacos source adapter 职责边界
 
 - **WHEN** Nacos source adapter 通过 Nacos v3 HTTP API 读取配置文档
-- **THEN** adapter MUST 将 server endpoint 解析、认证 token 获取与复用、HTTP 请求/响应处理、按声明顺序 failover 和单个 dataId 读取保持在 `common/runtime/config/nacos` package 内
+- **THEN** adapter MUST 将 server endpoint 解析、认证 token 获取与复用、HTTP 请求/响应处理、按声明顺序 failover 和单个 dataId 读取保持在 `platform/runtime/config/nacos` package 内
 - **AND** adapter MUST 继续实现业务中立 `DocumentSource` contract，使调用方能通过 `config.LoadSource` 合成多 dataId 文档并生成 `SourceMetadata`
-- **AND** adapter MUST NOT 把 Nacos 认证、endpoint、failover、watch、长轮询、SDK fallback、服务发现或仓库目录映射能力加入 `common/runtime/config` 核心包
+- **AND** adapter MUST NOT 把 Nacos 认证、endpoint、failover、watch、长轮询、SDK fallback、服务发现或仓库目录映射能力加入 `platform/runtime/config` 核心包
 
 #### Scenario: Nacos source 失败语义
 
@@ -422,13 +422,13 @@
 #### Scenario: 限流错误响应
 
 - **WHEN** HTTP middleware 或 handler 返回限流应用错误
-- **THEN** `common/http/response` MUST 渲染 `429 Too Many Requests`
+- **THEN** `platform/http/response` MUST 渲染 `429 Too Many Requests`
 - **AND** 响应 envelope MUST 为 `success=false`、稳定限流 code 和公开限流 message
 
 #### Scenario: 未知错误不伪装为限流
 
 - **WHEN** 系统返回 nil、未知错误或内部错误
-- **THEN** `common/http/response` MUST 保持现有内部错误归一化语义
+- **THEN** `platform/http/response` MUST 保持现有内部错误归一化语义
 - **AND** 系统 MUST NOT 将非限流错误映射为 `429 Too Many Requests`
 
 #### Scenario: 调用方提供限流 key
@@ -445,11 +445,11 @@
 
 ### Requirement: 应用错误码段治理
 
-系统 MUST 将 `common/contract/errors.Code` 作为稳定公开应用码治理，并 MUST 在共享契约中维护明确的错误码段分配、预留范围和扩展准入规则。`Code` MUST NOT 作为 HTTP status 使用，HTTP status MUST 继续只根据低基数 `Kind` 推导。
+系统 MUST 将 `platform/contract/errors.Code` 作为稳定公开应用码治理，并 MUST 在共享契约中维护明确的错误码段分配、预留范围和扩展准入规则。`Code` MUST NOT 作为 HTTP status 使用，HTTP status MUST 继续只根据低基数 `Kind` 推导。
 
 #### Scenario: 使用既定错误码段
 
-- **WHEN** 系统定义或审查 `common/contract/errors.Code`
+- **WHEN** 系统定义或审查 `platform/contract/errors.Code`
 - **THEN** `0` MUST 只用于成功响应 `CodeOK`
 - **AND** `10xxx` MUST 用于请求解析、绑定和字段校验错误
 - **AND** `20xxx` MUST 用于认证、凭证、token、session 和账号登录态错误
@@ -471,13 +471,13 @@
 #### Scenario: 新增 Kind 同步 HTTP 映射
 
 - **WHEN** 现有 `Kind` 无法表达新的低基数 HTTP 映射语义，系统新增 `Kind`
-- **THEN** 系统 MUST 同步更新 `common/http/response.statusCode` 的 HTTP status 推导
+- **THEN** 系统 MUST 同步更新 `platform/http/response.statusCode` 的 HTTP status 推导
 - **AND** 系统 MUST 添加或更新响应测试，覆盖新增 `Kind` 到 HTTP status 和响应 code 的映射
 - **AND** 未定义 HTTP 映射的 `Kind` MUST NOT 作为公开业务错误进入 feature 或 HTTP transport
 
 ### Requirement: HTTP trusted proxy 配置契约
 
-系统 MUST 在共享 runtime HTTP server 配置中提供 `server.http.trusted_proxies`，用于声明 Gin 可信任的上游代理 IP 或 CIDR 列表。该配置 MUST 由 `common/runtime/config` 严格解码、默认保持空值，并由服务级 Gin engine 初始化直接传入 `SetTrustedProxies`；系统 MUST NOT 读取、迁移、兼容或双写 `http.trusted_proxies` 或其他旧配置位置。
+系统 MUST 在共享 runtime HTTP server 配置中提供 `server.http.trusted_proxies`，用于声明 Gin 可信任的上游代理 IP 或 CIDR 列表。该配置 MUST 由 `platform/runtime/config` 严格解码、默认保持空值，并由服务级 Gin engine 初始化直接传入 `SetTrustedProxies`；系统 MUST NOT 读取、迁移、兼容或双写 `http.trusted_proxies` 或其他旧配置位置。
 
 #### Scenario: 默认不信任代理
 
@@ -499,7 +499,7 @@
 
 ### Requirement: 通用事务生命周期与直接调用禁令
 
-`common/runtime/datastore` MUST 提供业务中立的泛型事务生命周期 helper，用于 infrastructure 代码创建、提交和回滚显式事务边界。新增或改造的业务 infrastructure MUST 通过该 helper 终结事务，MUST NOT 直接调用底层 commit/rollback 或维护重复 helper。共享实现 MUST 只依赖标准库和最小事务接口。
+`platform/runtime/datastore` MUST 提供业务中立的泛型事务生命周期 helper，用于 infrastructure 代码创建、提交和回滚显式事务边界。新增或改造的业务 infrastructure MUST 通过该 helper 终结事务，MUST NOT 直接调用底层 commit/rollback 或维护重复 helper。共享实现 MUST 只依赖标准库和最小事务接口。
 
 #### Scenario: 使用 detached lifecycle context 创建事务
 
@@ -532,7 +532,7 @@
 - **WHEN** user-service infrastructure 需要创建 Ent 事务
 - **THEN** infrastructure 包 MUST 在消费侧适配 Ent client 到共享 transaction starter 接口
 - **AND** Ent 适配器 MUST 留在 user-service infrastructure 边界内
-- **AND** `common/runtime/datastore` MUST NOT 依赖 user-service Ent 生成类型
+- **AND** `platform/runtime/datastore` MUST NOT 依赖 user-service Ent 生成类型
 
 #### Scenario: 使用事务完成器终结事务
 
@@ -607,7 +607,7 @@
 
 ### Requirement: metrics primitive 文件职责与业务中立边界
 
-`common/runtime/observability/metrics` MUST 作为跨服务共享、业务中立的 runtime primitive 维护 provider、registry、context-aware gather、runtime collector 与 adapter 职责。实现可以在同 package 内按职责拆分文件，但 MUST 保持原 package、调用方 import path、导出 API、指标名称、label、bucket 和采集语义兼容。
+`platform/runtime/observability/metrics` MUST 作为跨服务共享、业务中立的 runtime primitive 维护 provider、registry、context-aware gather、runtime collector 与 adapter 职责。实现可以在同 package 内按职责拆分文件，但 MUST 保持原 package、调用方 import path、导出 API、指标名称、label、bucket 和采集语义兼容。
 
 #### Scenario: 同 package 文件职责可独立审查
 
@@ -622,7 +622,7 @@
 - **AND** 既有 Prometheus 指标名称、label name、label value 枚举、bucket 和采集语义 MUST 保持兼容
 - **AND** 系统 MUST NOT 为本次重构新增业务指标或删除既有稳定指标
 
-#### Scenario: common 不承载服务业务语义
+#### Scenario: platform 不承载服务业务语义
 
 - **WHEN** metrics package 增加文档、示例、collector 或 adapter
 - **THEN** 内容 MUST 保持业务中立，MUST NOT 导入 user-service feature 包、DTO、业务状态、业务 key schema、policy loader、route diff 或服务私有配置
@@ -636,7 +636,7 @@
 
 ### Requirement: Tracing primitive 公开 API 与实现边界
 
-`common/runtime/observability/tracing` MUST 作为业务中立的共享 runtime primitive 维护清晰的公开 API 和包内职责边界。公开入口 MUST 表达 tracing 能力、构造、传播和关闭职责；仅供 lifecycle adapter 使用的启动状态机 MUST 留在包内，除非存在经规格确认的跨服务调用需求。
+`platform/runtime/observability/tracing` MUST 作为业务中立的共享 runtime primitive 维护清晰的公开 API 和包内职责边界。公开入口 MUST 表达 tracing 能力、构造、传播和关闭职责；仅供 lifecycle adapter 使用的启动状态机 MUST 留在包内，除非存在经规格确认的跨服务调用需求。
 
 #### Scenario: 公开入口表达真实运行时职责
 - **WHEN** 调用方需要创建或消费 tracing provider
@@ -662,11 +662,11 @@
 
 ### Requirement: Runtime config pipeline 文档与布局
 
-`common/runtime/config` MUST 作为跨服务共享、业务中立的配置原语维护清晰的 source、merge、decode、defaults、validation、encode、redact 和 render 导航。实现 MAY 在同 package 内按职责拆分文件和测试，但 MUST 保持原 package、`Config` 类型、导出函数、默认值、字段路径、错误聚合、strict decode、raw digest、effective encode、redact 和 render 语义兼容。
+`platform/runtime/config` MUST 作为跨服务共享、业务中立的配置原语维护清晰的 source、merge、decode、defaults、validation、encode、redact 和 render 导航。实现 MAY 在同 package 内按职责拆分文件和测试，但 MUST 保持原 package、`Config` 类型、导出函数、默认值、字段路径、错误聚合、strict decode、raw digest、effective encode、redact 和 render 语义兼容。
 
 #### Scenario: 固定配置加载管线可从包文档导航
 
-- **WHEN** 调用方阅读 `common/runtime/config` 包文档或 executable example
+- **WHEN** 调用方阅读 `platform/runtime/config` 包文档或 executable example
 - **THEN** 文档 MUST 展示通过 `DocumentSource` 调用 `LoadSource` 取得 raw merged settings 和 source metadata
 - **AND** 文档 MUST 展示 `LoadSource` 内部按文档顺序执行 YAML deep merge，并在 defaults 和 normalize 前基于 raw settings 计算 `SourceMetadata.Digest`
 - **AND** 文档 MUST 展示调用方随后显式执行 `DecodeStrict`、`Validate`、`EncodeSettings`、可选 `RedactSettings` 和 `RenderYAML`
@@ -694,7 +694,7 @@
 
 ### Requirement: 通用 Redis Pub/Sub 单 channel 订阅原语
 
-`common/runtime/redispubsub` MUST 提供业务中立的 Redis classic Pub/Sub 单 channel subscriber，负责显式订阅确认、阻塞接收、有界消息缓冲、context 背压、带抖动的有界指数退避重连、单向生命周期和结构化状态。该 primitive MUST 保持 Redis Pub/Sub 的 at-most-once 通知语义，MUST NOT 承担 Publish 业务封装、消息 envelope、revision、outbox、幂等、数据库校准、Casbin reload、缓存失效、模式订阅、sharded Pub/Sub、Redis Streams 或可靠投递。
+`platform/runtime/redispubsub` MUST 提供业务中立的 Redis classic Pub/Sub 单 channel subscriber，负责显式订阅确认、阻塞接收、有界消息缓冲、context 背压、带抖动的有界指数退避重连、单向生命周期和结构化状态。该 primitive MUST 保持 Redis Pub/Sub 的 at-most-once 通知语义，MUST NOT 承担 Publish 业务封装、消息 envelope、revision、outbox、幂等、数据库校准、Casbin reload、缓存失效、模式订阅、sharded Pub/Sub、Redis Streams 或可靠投递。
 
 #### Scenario: 严格 options 与无副作用构造
 
@@ -765,7 +765,7 @@
 
 ### Requirement: 业务中立的 managed HTTP server 生命周期
 
-系统 MUST 在 `common/runtime/httpserver` 提供不依赖 Gin、Fx、服务私有配置或业务日志字段的 managed `net/http` server。公开 API MUST 包含严格的 `Options`、`Managed`、`New`、`Start`、`Stop`、`HTTPServer` 以及可匹配的 `ErrInvalidOptions`、`ErrAlreadyStarted` 和 `ErrStopped`；启用策略、地址来源、默认 timeout、日志和进程 shutdown 策略 MUST 由调用服务拥有。
+系统 MUST 在 `platform/runtime/httpserver` 提供不依赖 Gin、Fx、服务私有配置或业务日志字段的 managed `net/http` server。公开 API MUST 包含严格的 `Options`、`Managed`、`New`、`Start`、`Stop`、`HTTPServer` 以及可匹配的 `ErrInvalidOptions`、`ErrAlreadyStarted` 和 `ErrStopped`；启用策略、地址来源、默认 timeout、日志和进程 shutdown 策略 MUST 由调用服务拥有。
 
 #### Scenario: 构造严格校验且无运行时副作用
 
@@ -826,29 +826,29 @@
 
 ### Requirement: Runtime metrics 保持业务中立
 
-`common/runtime/observability/metrics` MUST 只提供跨服务通用的 metrics Provider、registry 注册、稳定 label 常量、HTTP metrics 支撑和业务中立 collector。该包 MUST NOT 定义、注册或导出 Casbin policy reload、permission、role、RBAC、user-service 或其他单一服务业务指标的接口、空实现、constructor、collector 或指标名称。
+`platform/runtime/observability/metrics` MUST 只提供跨服务通用的 metrics Provider、registry 注册、稳定 label 常量、HTTP metrics 支撑和业务中立 collector。该包 MUST NOT 定义、注册或导出 Casbin policy reload、permission、role、RBAC、user-service 或其他单一服务业务指标的接口、空实现、constructor、collector 或指标名称。
 
-#### Scenario: common metrics 不拥有 Casbin reload 指标
+#### Scenario: platform metrics 不拥有 Casbin reload 指标
 
-- **WHEN** 系统编译或审查 `common/runtime/observability/metrics`
+- **WHEN** 系统编译或审查 `platform/runtime/observability/metrics`
 - **THEN** 该包 MUST NOT 包含 `ReloadMetrics`、`NopReloadMetrics`、`NewCasbinPolicyReloadMetrics` 或 `aegiscore_casbin_*` 指标定义
 - **AND** 该包 MUST NOT 通过业务命名的 no-op recorder 为 user-service permission/RBAC 运行时提供依赖
 
 #### Scenario: 通用 component status collector 保留
 
 - **WHEN** 服务需要导出业务中立运行时组件的 running 和 last error 状态
-- **THEN** 系统 MUST 继续复用 `common/runtime/observability/metrics` 的 component status collector
+- **THEN** 系统 MUST 继续复用 `platform/runtime/observability/metrics` 的 component status collector
 - **AND** collector MUST 只使用稳定 resource label 与只读状态接口，不得内置 Casbin、permission、role 或 user-service 组件名
 
 #### Scenario: 业务指标归属调用方
 
 - **WHEN** 消费服务或 feature 需要记录带业务语义的 metrics
 - **THEN** 业务指标接口、空实现、指标名称和 collector MUST 由 owning service、feature 或其 observability adapter 拥有
-- **AND** owning 代码 MAY 复用通用 metrics Provider 注册 collector，但 MUST NOT 把业务 recorder 下沉到 `common`
+- **AND** owning 代码 MAY 复用通用 metrics Provider 注册 collector，但 MUST NOT 把业务 recorder 下沉到 `platform`
 
 ### Requirement: 共享事务 helper 不得注入隐藏事务生命周期上限
 
-`common/runtime/datastore` 的共享事务 helper MUST 使用调用方拥有的 context 策略表达事务生命周期。`BeginTransaction` MUST 保留原始 context value，并 MUST 隔离原始取消信号以允许请求取消后执行 rollback cleanup；当原始 context 提供 deadline 时，事务 lifecycle context MUST 继承该 deadline；当原始 context 没有 deadline 时，helper MUST NOT 为传入 `Ent Tx`、`database/sql.BeginTx` 或其他 transaction starter 的 context 注入固定 timeout、cleanup budget 或隐藏 deadline。
+`platform/runtime/datastore` 的共享事务 helper MUST 使用调用方拥有的 context 策略表达事务生命周期。`BeginTransaction` MUST 保留原始 context value，并 MUST 隔离原始取消信号以允许请求取消后执行 rollback cleanup；当原始 context 提供 deadline 时，事务 lifecycle context MUST 继承该 deadline；当原始 context 没有 deadline 时，helper MUST NOT 为传入 `Ent Tx`、`database/sql.BeginTx` 或其他 transaction starter 的 context 注入固定 timeout、cleanup budget 或隐藏 deadline。
 
 #### Scenario: 无原始 deadline 的事务不会获得默认 5 秒 deadline
 - **WHEN** 调用方以没有 deadline 的 context 调用 `datastore.BeginTransaction`
@@ -889,8 +889,8 @@
 - **THEN** workerpool MAY 记录任务池名称、任务名称、调用方提供的低敏 `Task.Fields`、panic 和 stacktrace
 - **AND** 消费端提供的 `Task.Fields` MUST NOT 包含完整 Redis key、Redis key prefix、可拼装 Redis key 的材料、token、密码、SQL 或原始凭据
 
-#### Scenario: common 不承担业务字段脱敏
+#### Scenario: platform 不承担业务字段脱敏
 - **WHEN** feature 需要在后台任务失败或 panic 日志中关联单次业务操作
 - **THEN** feature MUST 在自身边界生成低敏字段或不可逆 opaque 标识后再写入 `Task.Fields`
-- **AND** `common/runtime/workerpool` MUST NOT 为 user-service auth、RBAC、refresh session、Redis key schema 或其他服务私有字段提供业务专用过滤、兼容字段或脱敏分支
+- **AND** `platform/runtime/workerpool` MUST NOT 为 user-service auth、RBAC、refresh session、Redis key schema 或其他服务私有字段提供业务专用过滤、兼容字段或脱敏分支
 

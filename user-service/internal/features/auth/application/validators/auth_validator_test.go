@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/security/password"
+	platformauth "github.com/aegiscore/platform/security/auth"
+	"github.com/aegiscore/platform/security/password"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
@@ -31,7 +31,7 @@ func TestValidateLoginCommandRejectsBlankFields(t *testing.T) {
 }
 
 func TestValidateRefreshTokenRejectsBlankToken(t *testing.T) {
-	for _, token := range []string{"", " ", commonauth.TokenTypeBearer, commonauth.TokenPrefix} {
+	for _, token := range []string{"", " ", platformauth.TokenTypeBearer, platformauth.TokenPrefix} {
 		err := ValidateRefreshToken(token)
 		require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
 			"token %q err = %v, want ErrTokenInvalid", token, err)

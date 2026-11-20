@@ -59,7 +59,7 @@
 - **WHEN** metrics middleware 跳过 runtime endpoint 或其他配置化请求
 - **THEN** 请求总数和耗时 MAY 不记录，但 in-flight gauge MUST 在请求结束后归零，MUST NOT 因删除共享 label value 破坏并发计数
 - **WHEN** feature-local `Metrics` 需要空实现
-- **THEN** 系统 MUST 通过统一生成入口维护匹配接口的 no-op；业务指标 MUST 留在所属 feature，`common/runtime/observability/metrics` MUST NOT 承载 user-service 业务语义
+- **THEN** 系统 MUST 通过统一生成入口维护匹配接口的 no-op；业务指标 MUST 留在所属 feature，`platform/runtime/observability/metrics` MUST NOT 承载 user-service 业务语义
 
 #### Scenario: Scheduler 指标契约
 
@@ -155,7 +155,7 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 - **WHEN** 入站 `X-Request-ID` 合法
 - **THEN** 系统 MUST 在响应头和请求日志中透传相同值
 - **WHEN** header 缺失、空白、超长或含控制字符
-- **THEN** 系统 MUST 生成新值，并由 `common/runtime/logger` 写入和读取以用于响应头、access log 和应用日志
+- **THEN** 系统 MUST 生成新值，并由 `platform/runtime/logger` 写入和读取以用于响应头、access log 和应用日志
 - **WHEN** 请求具有有效 W3C trace context
 - **THEN** 日志 MUST 包含独立的 `request_id`、`trace_id` 和 `span_id`；span context 无效时 MUST 省略 trace 字段但保留 request ID，metrics label MUST NOT 包含这些 ID
 - **WHEN** 请求完成、发生 panic 或 span 对应操作失败
@@ -251,7 +251,7 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 
 ### Requirement: 运行时故障、诊断与依赖观测边界
 
-系统 MUST 将 HTTP 或 pprof listener 的非预期退出转换为 Fx shutdown signal，并在统一预算内优雅关闭。业务 HTTP 与 pprof MUST 使用 `common/runtime/httpserver` 的独立 managed server，composition root MUST 显式绑定 runtime server、诊断监听及 Redis/PostgreSQL 观测依赖；可预期错误 MUST 通过 constructor 返回，依赖健康、metrics、tracing 与日志 MUST 保持低基数且不泄露敏感信息。
+系统 MUST 将 HTTP 或 pprof listener 的非预期退出转换为 Fx shutdown signal，并在统一预算内优雅关闭。业务 HTTP 与 pprof MUST 使用 `platform/runtime/httpserver` 的独立 managed server，composition root MUST 显式绑定 runtime server、诊断监听及 Redis/PostgreSQL 观测依赖；可预期错误 MUST 通过 constructor 返回，依赖健康、metrics、tracing 与日志 MUST 保持低基数且不泄露敏感信息。
 
 #### Scenario: Listener 故障与关闭预算
 
@@ -275,7 +275,7 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 - **AND** `fx.RecoverFromPanics()` MUST NOT 被视为 HTTP handler、worker、后台 goroutine或 lifecycle hook 运行期 panic 的恢复策略，各边界 MUST 使用自身机制
 - **WHEN** 构建正式或测试 Fx App
 - **THEN** composition root MUST 显式绑定 process runtime 初始化、metrics、tracing、服务资源、feature lifecycle 和 runtime server，process runtime 初始化 MUST 先于 server 启动
-- **AND** `common/runtime/httpserver` 与 `common/runtime/observability` MUST 保持业务中立，MUST NOT 导入 user-service feature、router、bootstrap、Gin、Fx 或服务私有配置包
+- **AND** `platform/runtime/httpserver` 与 `platform/runtime/observability` MUST 保持业务中立，MUST NOT 导入 user-service feature、router、bootstrap、Gin、Fx 或服务私有配置包
 - **WHEN** `server.http.enabled=false` 或 pprof 未启用
 - **THEN** 对应 composition DTO MUST 显式表达 disabled，MUST NOT 构造或启动 `Managed`，也 MUST NOT 注册对应 lifecycle hook
 - **WHEN** 业务 HTTP 与 pprof 同时启用
@@ -446,7 +446,7 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 
 ### Requirement: Metrics provider registry 与 scrape context 契约
 
-系统 MUST 通过 `common/runtime/observability/metrics` 提供显式 enabled/disabled 状态的非 nil provider，并为启用状态使用独立 Prometheus registry。provider MUST 支持重复注册幂等、context-aware gather 和基于 HTTP request context 的 scrape handler；禁用状态 MUST 保持 no-op 且不得暴露 collector 或 HTTP metrics 输出。
+系统 MUST 通过 `platform/runtime/observability/metrics` 提供显式 enabled/disabled 状态的非 nil provider，并为启用状态使用独立 Prometheus registry。provider MUST 支持重复注册幂等、context-aware gather 和基于 HTTP request context 的 scrape handler；禁用状态 MUST 保持 no-op 且不得暴露 collector 或 HTTP metrics 输出。
 
 #### Scenario: 启用 provider 使用独立 registry
 
@@ -483,11 +483,11 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 
 ### Requirement: Metrics package 文档与示例
 
-`common/runtime/observability/metrics` MUST 提供 package 文档和可执行示例，说明 provider 启停、独立 registry、重复注册、`HTTPHandler`、`GatherContext`、collector context 和 label cardinality 的稳定用法。示例 MUST 使用本地 registry 与内存 collector，MUST NOT 访问公网或真实 datastore。
+`platform/runtime/observability/metrics` MUST 提供 package 文档和可执行示例，说明 provider 启停、独立 registry、重复注册、`HTTPHandler`、`GatherContext`、collector context 和 label cardinality 的稳定用法。示例 MUST 使用本地 registry 与内存 collector，MUST NOT 访问公网或真实 datastore。
 
 #### Scenario: go doc 导航到主要示例
 
-- **WHEN** 开发者查看 `common/runtime/observability/metrics` 的 package 文档
+- **WHEN** 开发者查看 `platform/runtime/observability/metrics` 的 package 文档
 - **THEN** 文档 MUST 能说明 enabled/disabled provider、独立 registry、重复注册、`HTTPHandler`、`GatherContext`、collector context 和 label cardinality 约束
 - **AND** go doc MUST 能导航到主要 executable examples
 
@@ -499,7 +499,7 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 
 ### Requirement: Tracing provider 生命周期所有权
 
-系统 MUST 为 `common/runtime/observability/tracing` provider 定义单一启动和关闭所有权。普通 constructor MUST 在返回前立即启动底层 SDK provider，并由调用方显式 `Shutdown`；Fx adapter MUST 在 constructor 阶段只返回未启动但可安全注入的 facade，并且只允许 Fx `OnStart` 创建 exporter、batch processor 和真实 SDK provider，Fx `OnStop` 或 rollback MUST 关闭同一 provider 并恢复 no-op。
+系统 MUST 为 `platform/runtime/observability/tracing` provider 定义单一启动和关闭所有权。普通 constructor MUST 在返回前立即启动底层 SDK provider，并由调用方显式 `Shutdown`；Fx adapter MUST 在 constructor 阶段只返回未启动但可安全注入的 facade，并且只允许 Fx `OnStart` 创建 exporter、batch processor 和真实 SDK provider，Fx `OnStop` 或 rollback MUST 关闭同一 provider 并恢复 no-op。
 
 #### Scenario: 普通 constructor 立即启动
 - **WHEN** 调用方使用普通 constructor 创建启用 tracing 的 provider
@@ -592,11 +592,11 @@ tracing provider MUST 对重复或非法 lifecycle 调用提供明确且被测�
 - **THEN** collector MUST 继续只表达业务中立的 running 和 last error 状态
 - **AND** Casbin reload 计数、last success gauge 和 RBAC watcher 专用指标 MUST 由 permission feature metrics 拥有
 
-#### Scenario: 架构门禁防止业务指标回流 common
+#### Scenario: 架构门禁防止业务指标回流 platform
 
 - **WHEN** 运行 `make user-service-architecture-lint`
-- **THEN** 检查 MUST 在 `common/runtime/observability/metrics` 出现 Casbin、permission、role、RBAC、user-service 或 `aegiscore_casbin` 业务 metrics 语义时失败
-- **AND** 该门禁 MUST 不禁止 common 保留通用 Provider、通用 label、HTTP metrics 和 component status collector
+- **THEN** 检查 MUST 在 `platform/runtime/observability/metrics` 出现 Casbin、permission、role、RBAC、user-service 或 `aegiscore_casbin` 业务 metrics 语义时失败
+- **AND** 该门禁 MUST 不禁止 platform 保留通用 Provider、通用 label、HTTP metrics 和 component status collector
 
 ### Requirement: HTTP CORS 跨域访问控制策略配置
 

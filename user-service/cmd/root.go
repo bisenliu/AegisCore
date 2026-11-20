@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	runtimefxgraph "github.com/aegiscore/common/runtime/fxgraph"
+	runtimefxgraph "github.com/aegiscore/platform/runtime/fxgraph"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
@@ -34,7 +34,7 @@ func defaultRootCommandDependencies() rootCommandDependencies {
 }
 
 // withConfigLoadTimeout 为 CLI 构造阶段的远程配置加载施加总预算。
-// 该预算不进入 common/runtime/config.Config，避免把 user-service 启动策略扩散到共享配置结构。
+// 该预算不进入 platform/runtime/config.Config，避免把 user-service 启动策略扩散到共享配置结构。
 func withConfigLoadTimeout(loadConfig configLoader, timeout time.Duration) configLoader {
 	return func(ctx context.Context) (*serviceconfig.LoadResult, error) {
 		if timeout <= 0 {

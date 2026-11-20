@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/platform/runtime/config"
 )
 
 func TestSkipSuccessfulRuntimeEndpointLog(t *testing.T) {

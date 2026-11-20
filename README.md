@@ -1,12 +1,12 @@
 # AegisCore
 
-AegisCore 是 Go 1.27.4 workspace 后端项目底座，当前包含跨服务共享模块 `common`、用户服务模块 `user-service` 和仓库级交付工具 `tools`。用户服务提供用户资料、认证会话、角色、权限、RBAC 授权、健康探针、OpenAPI、metrics/tracing/logging 和 Ent/Atlas migration 工作流。
+AegisCore 是 Go 1.27.4 workspace 后端项目底座，当前包含跨服务共享模块 `platform`、用户服务模块 `user-service` 和仓库级交付工具 `tools`。用户服务提供用户资料、认证会话、角色、权限、RBAC 授权、健康探针、OpenAPI、metrics/tracing/logging 和 Ent/Atlas migration 工作流。
 
 ## 仓库布局
 
 | 路径 | 目的 |
 |---|---|
-| `common/` | 跨服务稳定契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力 |
+| `platform/` | 跨服务稳定契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力 |
 | `user-service/` | 当前用户服务，位于仓库根目录；新业务服务与它平级，不使用 `services/` |
 | `tools/` | 仓库级交付工具，例如跨服务复用的 OpenAPI 转换 CLI |
 | `deployments/` | Docker、Compose、Helm、Prometheus/Grafana 部署和观测资产；Kubernetes 清单由 Helm 渲染 |
@@ -68,11 +68,11 @@ docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-ser
   --display-name MyProject
 ```
 
-不要手工全局替换。脚本从 `project.yaml` 读取旧身份，更新 Go module、环境变量、指标、镜像前缀和未加分隔符的项目名，并改名带旧镜像前缀的 Helm chart 目录。它不移动 `user-service/`、`common/`，也不修改系统 RBAC ID。更名及代码生成成功后自动删除 `project.yaml`、`.github`、`.git`、`renovate.json` 和 `coverage/`，不回写新身份，也不初始化新 Git 仓库，原历史及 remote 配置会被移除。确认前先跑 `--dry-run`。`--apply` 要求工作区纯净，先检查 Go 工具链，再执行 `go work sync`、Ent 生成和 OpenAPI 生成。linked worktree 不支持 `--apply`；预览或更名失败时保留这些文件。执行完成后脚本会提供本地项目目录名和新 Git 仓库的手动操作指引。
+不要手工全局替换。脚本从 `project.yaml` 读取旧身份，更新 Go module、环境变量、指标、镜像前缀和未加分隔符的项目名，并改名带旧镜像前缀的 Helm chart 目录。它不移动 `user-service/`、`platform/`，也不修改系统 RBAC ID。更名及代码生成成功后自动删除 `project.yaml`、`.github`、`.git`、`renovate.json` 和 `coverage/`，不回写新身份，也不初始化新 Git 仓库，原历史及 remote 配置会被移除。确认前先跑 `--dry-run`。`--apply` 要求工作区纯净，先检查 Go 工具链，再执行 `go work sync`、Ent 生成和 OpenAPI 生成。linked worktree 不支持 `--apply`；预览或更名失败时保留这些文件。执行完成后脚本会提供本地项目目录名和新 Git 仓库的手动操作指引。
 
 ## 运行时配置边界
 
-共享 `common/runtime/config.Config` 只包含 `app`、`server`、`log` 和 `observability`。Redis/PostgreSQL 连接类型由 `common/runtime/resources` 复用，但具名资源及其 `resources.*` 路径由具体服务声明；user-service 当前只声明 `resources.redis.cache_redis` 和 `resources.postgres.primary_db`。Redis 通过 `mode` 选择 `cluster` 或 `standalone`：集群使用 `addrs` 和可选 `cluster.max_redirects`，非集群使用 `addr`，两种 mode 均固定使用 Redis 0 号库且不暴露 `db` 配置。认证 token version cache 与 RBAC user role cache 分别位于 `auth.token_version_cache` 和 `rbac.user_role_cache`，只包含启停与 TTL，不属于共享核心配置。
+共享 `platform/runtime/config.Config` 只包含 `app`、`server`、`log` 和 `observability`。Redis/PostgreSQL 连接类型由 `platform/runtime/resources` 复用，但具名资源及其 `resources.*` 路径由具体服务声明；user-service 当前只声明 `resources.redis.cache_redis` 和 `resources.postgres.primary_db`。Redis 通过 `mode` 选择 `cluster` 或 `standalone`：集群使用 `addrs` 和可选 `cluster.max_redirects`，非集群使用 `addr`，两种 mode 均固定使用 Redis 0 号库且不暴露 `db` 配置。认证 token version cache 与 RBAC user role cache 分别位于 `auth.token_version_cache` 和 `rbac.user_role_cache`，只包含启停与 TTL，不属于共享核心配置。
 
 日志只写 stdout/stderr，采集、保留和轮转由运行平台负责。Tracing 启用后固定通过 OTLP 导出；pprof 使用独立的 `AEGISCORE_OBSERVABILITY_PPROF_ENABLED`、`AEGISCORE_OBSERVABILITY_PPROF_ADDR` 诊断监听，默认关闭。反向代理信任通过 `server.http.trusted_proxies` 显式声明上游代理 IP/CIDR；入口 Ingress、gateway 或 service mesh 必须覆盖或重建 forwarded headers，应用只在请求来自受信任代理时读取真实客户端地址。进程时区使用平台标准 `TZ`。
 

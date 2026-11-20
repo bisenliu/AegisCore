@@ -3,9 +3,9 @@ package bootstrap
 import (
 	"go.uber.org/fx"
 
-	"github.com/aegiscore/common/runtime/logger"
-	commontz "github.com/aegiscore/common/runtime/timezone"
-	"github.com/aegiscore/common/validation"
+	"github.com/aegiscore/platform/runtime/logger"
+	platformtz "github.com/aegiscore/platform/runtime/timezone"
+	"github.com/aegiscore/platform/validation"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authfeature "github.com/aegiscore/user-service/internal/features/auth"
 	permissionfeature "github.com/aegiscore/user-service/internal/features/permission"
@@ -54,7 +54,7 @@ func registerRuntimeServers(_ *HTTPRuntime, _ *PprofRuntime) {}
 
 // InitProcessRuntime 初始化 user-service 拥有的进程级 runtime 状态。
 func InitProcessRuntime(settings serviceconfig.TimezoneSettings) error {
-	return commontz.Init(settings.Name)
+	return platformtz.Init(settings.Name)
 }
 
 // AppModule 汇总用户服务的全部组件装配与运行时启动逻辑，作为服务启动的唯一总入口。

@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/aegiscore/common/runtime/datastore"
+	"github.com/aegiscore/platform/runtime/datastore"
 	rolebootstrap "github.com/aegiscore/user-service/internal/features/role/application/bootstrap"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 )

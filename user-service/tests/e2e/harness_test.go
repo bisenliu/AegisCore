@@ -21,11 +21,11 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	contractresponse "github.com/aegiscore/common/contract/response"
-	commonconfig "github.com/aegiscore/common/runtime/config"
-	commonresources "github.com/aegiscore/common/runtime/resources"
-	"github.com/aegiscore/common/testing/containers"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	contractresponse "github.com/aegiscore/platform/contract/response"
+	platformconfig "github.com/aegiscore/platform/runtime/config"
+	platformresources "github.com/aegiscore/platform/runtime/resources"
+	"github.com/aegiscore/platform/testing/containers"
 	"github.com/aegiscore/user-service/internal/bootstrap"
 	configtestkit "github.com/aegiscore/user-service/internal/config/testkit"
 )
@@ -59,7 +59,7 @@ func newHTTPFlowHarness(t *testing.T) *httpFlowHarness {
 	configPath := writeTestConfig(t, postgres.Config(), redis.Config())
 	content, err := os.ReadFile(configPath)
 	require.NoError(t, err)
-	loaded, err := configtestkit.LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "config.yaml", Content: content}})
+	loaded, err := configtestkit.LoadFromDocuments([]platformconfig.ConfigDocument{{DataID: "config.yaml", Content: content}})
 	require.NoError(t, err)
 	serviceCfg := loaded.Config
 	var engine *gin.Engine
@@ -82,7 +82,7 @@ func requireE2EEnabled(t *testing.T) {
 	t.Skip("pass -args -aegiscore.testcontainers to run user-service HTTP flow integration tests")
 }
 
-func writeTestConfig(t *testing.T, postgres commonresources.PostgresConfig, redis commonresources.RedisConfig) string {
+func writeTestConfig(t *testing.T, postgres platformresources.PostgresConfig, redis platformresources.RedisConfig) string {
 	t.Helper()
 	port := freeTCPPort(t)
 	content := fmt.Sprintf(`app:

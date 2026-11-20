@@ -7,9 +7,9 @@ import (
 
 	"go.uber.org/zap"
 
-	runtimeid "github.com/aegiscore/common/runtime/id"
-	"github.com/aegiscore/common/runtime/logger"
-	"github.com/aegiscore/common/security/password"
+	runtimeid "github.com/aegiscore/platform/runtime/id"
+	"github.com/aegiscore/platform/runtime/logger"
+	"github.com/aegiscore/platform/security/password"
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	"github.com/aegiscore/user-service/internal/features/user/application/validators"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"

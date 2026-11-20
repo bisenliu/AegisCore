@@ -64,7 +64,7 @@ digraph {
 	}
 	constructor_10 -> "*config.Config" [ltail=cluster_10];
 	subgraph cluster_11 {
-		label = "github.com/aegiscore/common/runtime/logger";
+		label = "github.com/aegiscore/platform/runtime/logger";
 		constructor_11 [shape=plaintext label="NewLogger"];
 		"*zap.Logger" [label=<*zap.Logger>];
 	}
@@ -90,7 +90,7 @@ digraph {
 	constructor_13 -> "*config.Config" [ltail=cluster_13];
 	constructor_13 -> "*zap.Logger" [ltail=cluster_13];
 	subgraph cluster_14 {
-		label = "github.com/aegiscore/common/validation";
+		label = "github.com/aegiscore/platform/validation";
 		constructor_14 [shape=plaintext label="NewDefault"];
 		"*validation.Validator" [label=<*validation.Validator>];
 	}
@@ -396,13 +396,13 @@ digraph {
 	constructor_55 -> "query.UserQueryService" [ltail=cluster_55];
 	constructor_55 -> "*validation.Validator" [ltail=cluster_55];
 	subgraph cluster_56 {
-		label = "github.com/aegiscore/common/runtime/observability/metrics";
+		label = "github.com/aegiscore/platform/runtime/observability/metrics";
 		constructor_56 [shape=plaintext label="NewMetricsProvider"];
 		"*metrics.Provider" [label=<*metrics.Provider>];
 	}
 	constructor_56 -> "*config.Config" [ltail=cluster_56];
 	subgraph cluster_57 {
-		label = "github.com/aegiscore/common/runtime/observability/tracing";
+		label = "github.com/aegiscore/platform/runtime/observability/tracing";
 		constructor_57 [shape=plaintext label="NewTracingProvider"];
 		"*tracing.Provider" [label=<*tracing.Provider>];
 	}
@@ -421,7 +421,7 @@ digraph {
 	constructor_58 -> "application.PolicyWatcherStatus" [ltail=cluster_58];
 	constructor_58 -> "application.OutboxDispatcherStatus" [ltail=cluster_58];
 	subgraph cluster_59 {
-		label = "github.com/aegiscore/common/security/password";
+		label = "github.com/aegiscore/platform/security/password";
 		constructor_59 [shape=plaintext label="NewService"];
 		"*password.Service" [label=<*password.Service>];
 	}
@@ -485,7 +485,7 @@ digraph {
 	constructor_66 -> "*tracing.Provider" [ltail=cluster_66];
 	constructor_66 -> "config.HTTPSettings" [ltail=cluster_66];
 	subgraph cluster_67 {
-		label = "github.com/aegiscore/common/runtime/logger";
+		label = "github.com/aegiscore/platform/runtime/logger";
 		constructor_67 [shape=plaintext label="NewFxEventLogger"];
 		"fxevent.Logger" [label=<fxevent.Logger>];
 	}
@@ -498,7 +498,7 @@ digraph {
 	constructor_68 -> "*metrics.Provider" [ltail=cluster_68];
 	constructor_68 -> "authorization.PolicyHealth[name=permission_policy_health]" [ltail=cluster_68];
 	subgraph cluster_69 {
-		label = "github.com/aegiscore/common/runtime/observability/metrics";
+		label = "github.com/aegiscore/platform/runtime/observability/metrics";
 		constructor_69 [shape=plaintext label="NewCasbinPolicyReloadMetrics"];
 		"metrics.ReloadMetrics" [label=<metrics.ReloadMetrics>];
 	}

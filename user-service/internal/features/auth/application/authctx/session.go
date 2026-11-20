@@ -4,13 +4,13 @@ import (
 	"context"
 	"uuid"
 
-	commonauth "github.com/aegiscore/common/security/auth"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
 // AuthenticatedSession 从 ctx 读取已认证用户和会话标识。
 func AuthenticatedSession(ctx context.Context) (uuid.UUID, string, error) {
-	userIDString, ok := commonauth.UserIDFromContext(ctx)
+	userIDString, ok := platformauth.UserIDFromContext(ctx)
 	if !ok {
 		return uuid.Nil(), "", authdomain.ErrMissingSession
 	}
@@ -18,7 +18,7 @@ func AuthenticatedSession(ctx context.Context) (uuid.UUID, string, error) {
 	if err != nil {
 		return uuid.Nil(), "", authdomain.ErrMissingSession
 	}
-	sessionID, ok := commonauth.SessionIDFromContext(ctx)
+	sessionID, ok := platformauth.SessionIDFromContext(ctx)
 	if !ok {
 		return uuid.Nil(), "", authdomain.ErrMissingSession
 	}
@@ -27,7 +27,7 @@ func AuthenticatedSession(ctx context.Context) (uuid.UUID, string, error) {
 
 // AuthenticatedUserID 从 ctx 读取已认证用户标识。
 func AuthenticatedUserID(ctx context.Context) (uuid.UUID, error) {
-	userIDString, ok := commonauth.UserIDFromContext(ctx)
+	userIDString, ok := platformauth.UserIDFromContext(ctx)
 	if !ok {
 		return uuid.Nil(), authdomain.ErrMissingSession
 	}

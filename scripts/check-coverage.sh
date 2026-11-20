@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COVERAGE_DIR="${COVERAGE_DIR:-$ROOT_DIR/coverage}"
-COMMON_MIN_COVERAGE="${COMMON_MIN_COVERAGE:-75.0}"
+PLATFORM_MIN_COVERAGE="${PLATFORM_MIN_COVERAGE:-75.0}"
 USER_SERVICE_HANDWRITTEN_MIN_COVERAGE="${USER_SERVICE_HANDWRITTEN_MIN_COVERAGE:-75.0}"
 CHANGED_CODE_MIN_COVERAGE="${CHANGED_CODE_MIN_COVERAGE:-80.0}"
 
@@ -51,7 +51,7 @@ is_handwritten_go_file() {
   if [[ "$file" == user-service/internal/persistence/ent/* && "$file" != user-service/internal/persistence/ent/schema/* ]]; then
     return 1
   fi
-  [[ "$file" == common/* || "$file" == user-service/* ]]
+  [[ "$file" == platform/* || "$file" == user-service/* ]]
 }
 
 changed_coverage_base_ref() {
@@ -72,7 +72,7 @@ generate_changed_lines() {
   local diff_file
   diff_file="$(mktemp)"
 
-  git -C "$ROOT_DIR" diff --unified=0 --diff-filter=ACMR "$base_ref"...HEAD -- common user-service > "$diff_file"
+  git -C "$ROOT_DIR" diff --unified=0 --diff-filter=ACMR "$base_ref"...HEAD -- platform user-service > "$diff_file"
   perl -ne '
     if (/^\+\+\+ b\/(.+)$/) { $file = $1; next }
     if (/^@@ .*\+(\d+)(?:,(\d+))? /) { $line = $1; $remaining = defined($2) ? $2 : 1; next }
@@ -100,7 +100,7 @@ check_changed_code_coverage() {
   changed_lines_file="$(mktemp)"
   profile_file="$(mktemp)"
   generate_changed_lines "$base_ref" "$changed_lines_file"
-  cat "$common_profile" "$user_service_handwritten_profile" > "$profile_file"
+  cat "$platform_profile" "$user_service_handwritten_profile" > "$profile_file"
 
   changed_total_file="$(mktemp)"
   awk '
@@ -160,14 +160,14 @@ run_module_coverage() {
   )
 }
 
-common_profile="$COVERAGE_DIR/common.out"
-common_report="$COVERAGE_DIR/common.txt"
+platform_profile="$COVERAGE_DIR/platform.out"
+platform_report="$COVERAGE_DIR/platform.txt"
 user_service_profile="$COVERAGE_DIR/user-service.out"
 user_service_report="$COVERAGE_DIR/user-service.txt"
 user_service_handwritten_profile="$COVERAGE_DIR/user-service-handwritten.out"
 user_service_handwritten_report="$COVERAGE_DIR/user-service-handwritten.txt"
 
-run_module_coverage common "$common_profile" "$common_report"
+run_module_coverage platform "$platform_profile" "$platform_report"
 run_module_coverage user-service "$user_service_profile" "$user_service_report"
 filter_user_service_handwritten_profile "$user_service_profile" "$user_service_handwritten_profile"
 (
@@ -175,11 +175,11 @@ filter_user_service_handwritten_profile "$user_service_profile" "$user_service_h
   go tool cover -func="$user_service_handwritten_profile" > "$user_service_handwritten_report"
 )
 
-common_total="$(coverage_total "$common_report")"
+platform_total="$(coverage_total "$platform_report")"
 user_service_total="$(coverage_total "$user_service_report")"
 user_service_handwritten_total="$(coverage_total "$user_service_handwritten_report")"
 
 printf 'user-service raw coverage %.1f%% is reported for visibility only; generated Ent/OpenAPI code is excluded from the handwritten gate.\n' "$user_service_total"
-check_threshold common "$common_total" "$COMMON_MIN_COVERAGE"
+check_threshold platform "$platform_total" "$PLATFORM_MIN_COVERAGE"
 check_threshold user-service-handwritten "$user_service_handwritten_total" "$USER_SERVICE_HANDWRITTEN_MIN_COVERAGE"
 check_changed_code_coverage

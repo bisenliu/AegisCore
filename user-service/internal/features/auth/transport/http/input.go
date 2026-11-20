@@ -3,8 +3,8 @@ package authhttp
 import (
 	"strings"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	commonauth "github.com/aegiscore/common/security/auth"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	"github.com/aegiscore/user-service/internal/messages"
 )
@@ -21,8 +21,8 @@ func prepareLoginCommand(req LoginRequest) (authcommand.LoginCommand, error) {
 
 // prepareRefreshTokenCommand 将刷新 token HTTP 请求转换为应用层命令。
 func prepareRefreshTokenCommand(req RefreshTokenRequest) (authcommand.RefreshTokenCommand, error) {
-	refreshToken := commonauth.StripBearerPrefix(req.RefreshToken)
-	if refreshToken == "" || strings.EqualFold(refreshToken, commonauth.TokenTypeBearer) {
+	refreshToken := platformauth.StripBearerPrefix(req.RefreshToken)
+	if refreshToken == "" || strings.EqualFold(refreshToken, platformauth.TokenTypeBearer) {
 		return authcommand.RefreshTokenCommand{}, contracterrors.TokenInvalidError(messages.MissingSession)
 	}
 	return authcommand.RefreshTokenCommand{RefreshToken: refreshToken}, nil
@@ -30,9 +30,9 @@ func prepareRefreshTokenCommand(req RefreshTokenRequest) (authcommand.RefreshTok
 
 // prepareForceChangePasswordCommand 将强制改密 HTTP 请求转换为应用层命令。
 func prepareForceChangePasswordCommand(req ForceChangePasswordRequest) (authcommand.ForceChangePasswordCommand, error) {
-	token := commonauth.StripBearerPrefix(req.Token)
+	token := platformauth.StripBearerPrefix(req.Token)
 	newPassword := strings.TrimSpace(req.NewPassword)
-	if token == "" || strings.EqualFold(token, commonauth.TokenTypeBearer) {
+	if token == "" || strings.EqualFold(token, platformauth.TokenTypeBearer) {
 		return authcommand.ForceChangePasswordCommand{}, contracterrors.TokenInvalidError(messages.MissingSession)
 	}
 	if newPassword == "" {

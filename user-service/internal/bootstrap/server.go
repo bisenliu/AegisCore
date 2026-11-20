@@ -11,9 +11,9 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/httpserver"
-	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/platform/runtime/config"
+	"github.com/aegiscore/platform/runtime/httpserver"
+	"github.com/aegiscore/platform/runtime/logger"
 )
 
 // HTTPRuntime 表达业务 HTTP server 的启用状态和可选运行实例。

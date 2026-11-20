@@ -3,8 +3,8 @@ package validators
 import (
 	"strings"
 
-	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/security/password"
+	platformauth "github.com/aegiscore/platform/security/auth"
+	"github.com/aegiscore/platform/security/password"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
@@ -37,6 +37,6 @@ func ValidateForceChangePasswordCommand(token string, newPassword string) error 
 
 // isBlankToken 检查传入的凭证文本是否为空或全由空格组成。
 func isBlankToken(token string) bool {
-	token = commonauth.StripBearerPrefix(token)
-	return token == "" || strings.EqualFold(token, commonauth.TokenTypeBearer)
+	token = platformauth.StripBearerPrefix(token)
+	return token == "" || strings.EqualFold(token, platformauth.TokenTypeBearer)
 }

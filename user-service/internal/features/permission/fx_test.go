@@ -15,9 +15,9 @@ import (
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/localcache"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	"github.com/aegiscore/platform/runtime/config"
+	"github.com/aegiscore/platform/runtime/localcache"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
@@ -261,9 +261,9 @@ func TestPermissionModuleRequiresMetricsProvider(t *testing.T) {
 	require.Contains(t, app.Err().Error(), "metrics.Provider")
 }
 
-func newPermissionModuleMetricsProvider(t *testing.T, enabled bool) *commonmetrics.Provider {
+func newPermissionModuleMetricsProvider(t *testing.T, enabled bool) *platformmetrics.Provider {
 	t.Helper()
-	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+	provider, err := platformmetrics.NewProvider(platformmetrics.Options{
 		Config:      config.MetricsConfig{Enabled: enabled},
 		ServiceName: "aegiscore-user-service-module-test",
 		Environment: "test",

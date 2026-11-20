@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	commonauth "github.com/aegiscore/common/security/auth"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
@@ -111,7 +111,7 @@ func (u *refreshTokenUseCase) refreshWithRotation(ctx context.Context, claims *a
 // refreshFailureReason 将凭证续期失败的原因归纳为统一标识，供系统监控统计使用。
 func refreshFailureReason(err error) string {
 	switch {
-	case errors.Is(err, commonauth.ErrTokenVersionMismatch):
+	case errors.Is(err, platformauth.ErrTokenVersionMismatch):
 		return authapplication.MetricsReasonTokenVersionMismatch
 	case errors.Is(err, authdomain.ErrAuthSessionNotFound):
 		return authapplication.MetricsReasonRefreshSessionInvalid

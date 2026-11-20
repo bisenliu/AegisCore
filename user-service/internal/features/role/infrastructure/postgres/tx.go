@@ -9,7 +9,7 @@ import (
 
 	entsql "entgo.io/ent/dialect/sql"
 
-	"github.com/aegiscore/common/runtime/datastore"
+	"github.com/aegiscore/platform/runtime/datastore"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 	entrbacpolicyrevision "github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"

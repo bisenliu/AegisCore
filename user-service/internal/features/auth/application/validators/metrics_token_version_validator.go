@@ -5,7 +5,7 @@ import (
 	"errors"
 	"uuid"
 
-	commonauth "github.com/aegiscore/common/security/auth"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
@@ -20,7 +20,7 @@ type metricsTokenVersionValidator struct {
 }
 
 // NewMetricsTokenVersionValidator 为 access token version mismatch 增加业务指标记录。
-func NewMetricsTokenVersionValidator(next tokenVersionUUIDValidator, metrics authapplication.Metrics) commonauth.TokenVersionValidator {
+func NewMetricsTokenVersionValidator(next tokenVersionUUIDValidator, metrics authapplication.Metrics) platformauth.TokenVersionValidator {
 	if metrics == nil {
 		metrics = authapplication.NopMetrics()
 	}
@@ -37,7 +37,7 @@ func (v metricsTokenVersionValidator) ValidateTokenVersion(ctx context.Context, 
 		return authdomain.ErrTokenInvalid
 	}
 	err = v.next.ValidateTokenVersion(ctx, parsedUserID, tokenVersion)
-	if errors.Is(err, commonauth.ErrTokenVersionMismatch) {
+	if errors.Is(err, platformauth.ErrTokenVersionMismatch) {
 		v.metrics.TokenVersionMismatch(ctx, authapplication.MetricsSourceAccessToken)
 	}
 	return err

@@ -9,7 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
@@ -49,7 +49,7 @@ type entQueryMetrics struct {
 }
 
 // newEntQueryMetrics 仅在 metrics provider 启用时注册 Ent query collector。
-func newEntQueryMetrics(provider *commonmetrics.Provider) (*entQueryMetrics, error) {
+func newEntQueryMetrics(provider *platformmetrics.Provider) (*entQueryMetrics, error) {
 	if provider == nil || !provider.Enabled() {
 		return nil, nil
 	}

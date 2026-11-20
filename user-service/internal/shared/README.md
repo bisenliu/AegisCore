@@ -1,6 +1,6 @@
 # User Service Shared Kernel
 
-`internal/shared` 只承载用户服务内稳定共享业务内核。新增内容必须已经被至少两个 feature 真实消费，且不能归入跨服务无业务语义的 `common`。
+`internal/shared` 只承载用户服务内稳定共享业务内核。新增内容必须已经被至少两个 feature 真实消费，且不能归入跨服务无业务语义的 `platform`。
 
 ## 目录规则
 

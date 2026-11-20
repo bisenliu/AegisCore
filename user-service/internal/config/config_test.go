@@ -9,8 +9,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	commonconfig "github.com/aegiscore/common/runtime/config"
-	commonresources "github.com/aegiscore/common/runtime/resources"
+	platformconfig "github.com/aegiscore/platform/runtime/config"
+	platformresources "github.com/aegiscore/platform/runtime/resources"
 	serviceresources "github.com/aegiscore/user-service/internal/resources"
 )
 
@@ -47,7 +47,7 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.False(t, cfg.Ent.Plugins.Tracing.Enabled)
 	require.True(t, cfg.Ent.Plugins.Metrics.Enabled)
 	require.Len(t, cfg.Resources.Redis, 1)
-	require.Equal(t, commonresources.RedisModeCluster, cfg.Resources.Redis[serviceresources.NameCacheRedis].Mode)
+	require.Equal(t, platformresources.RedisModeCluster, cfg.Resources.Redis[serviceresources.NameCacheRedis].Mode)
 	require.Equal(t, []string{"127.0.0.1:6379"}, cfg.Resources.Redis[serviceresources.NameCacheRedis].Addrs)
 	require.Equal(t, 7*time.Second, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
 	require.Equal(t, 8, cfg.Resources.Redis[serviceresources.NameCacheRedis].Cluster.MaxRedirects)
@@ -71,16 +71,16 @@ func TestDefaultFeatureCacheConfigReturnsCompleteValue(t *testing.T) {
 func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
 	cfg := DefaultConfig()
 
-	require.Equal(t, commonconfig.DefaultConfig(), cfg.Config)
-	require.Equal(t, commonresources.RedisModeCluster, cfg.Resources.Redis[serviceresources.NameCacheRedis].Mode)
-	require.Equal(t, commonresources.DefaultRedisTimeout, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
-	require.Equal(t, commonresources.DefaultRedisClusterMaxRedirects, cfg.Resources.Redis[serviceresources.NameCacheRedis].Cluster.MaxRedirects)
+	require.Equal(t, platformconfig.DefaultConfig(), cfg.Config)
+	require.Equal(t, platformresources.RedisModeCluster, cfg.Resources.Redis[serviceresources.NameCacheRedis].Mode)
+	require.Equal(t, platformresources.DefaultRedisTimeout, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
+	require.Equal(t, platformresources.DefaultRedisClusterMaxRedirects, cfg.Resources.Redis[serviceresources.NameCacheRedis].Cluster.MaxRedirects)
 	postgres := cfg.Resources.Postgres[serviceresources.NamePrimaryDB]
-	require.Equal(t, commonresources.DefaultPostgresSSLMode, postgres.SSLMode)
-	require.Equal(t, commonresources.DefaultPostgresMaxOpenConns, postgres.Pool.MaxOpenConns)
-	require.Equal(t, commonresources.DefaultPostgresMaxIdleConns, postgres.Pool.MaxIdleConns)
-	require.Equal(t, commonresources.DefaultPostgresConnMaxLifetime, postgres.Pool.ConnMaxLifetime)
-	require.Equal(t, commonresources.DefaultPostgresConnMaxIdleTime, postgres.Pool.ConnMaxIdleTime)
+	require.Equal(t, platformresources.DefaultPostgresSSLMode, postgres.SSLMode)
+	require.Equal(t, platformresources.DefaultPostgresMaxOpenConns, postgres.Pool.MaxOpenConns)
+	require.Equal(t, platformresources.DefaultPostgresMaxIdleConns, postgres.Pool.MaxIdleConns)
+	require.Equal(t, platformresources.DefaultPostgresConnMaxLifetime, postgres.Pool.ConnMaxLifetime)
+	require.Equal(t, platformresources.DefaultPostgresConnMaxIdleTime, postgres.Pool.ConnMaxIdleTime)
 	require.Equal(t, DefaultFeatureCacheConfig(time.Second), cfg.Auth.TokenVersionCache)
 	require.Equal(t, DefaultFeatureCacheConfig(5*time.Second), cfg.RBAC.UserRoleCache)
 	require.Equal(t, DefaultPolicyWatcherConfig(), cfg.RBAC.PolicyWatcher)
@@ -410,13 +410,13 @@ func TestValidateFeatureCaches(t *testing.T) {
 func TestLoadAppliesResourceDefaultsBeforeValidation(t *testing.T) {
 	cfg := loadServiceConfig(t, serviceConfigYAMLWithResourceDefaults())
 
-	require.Equal(t, commonresources.DefaultRedisTimeout, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
+	require.Equal(t, platformresources.DefaultRedisTimeout, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
 	postgres := cfg.Resources.Postgres[serviceresources.NamePrimaryDB]
-	require.Equal(t, commonresources.DefaultPostgresSSLMode, postgres.SSLMode)
-	require.Equal(t, commonresources.DefaultPostgresMaxOpenConns, postgres.Pool.MaxOpenConns)
-	require.Equal(t, commonresources.DefaultPostgresMaxIdleConns, postgres.Pool.MaxIdleConns)
-	require.Equal(t, commonresources.DefaultPostgresConnMaxLifetime, postgres.Pool.ConnMaxLifetime)
-	require.Equal(t, commonresources.DefaultPostgresConnMaxIdleTime, postgres.Pool.ConnMaxIdleTime)
+	require.Equal(t, platformresources.DefaultPostgresSSLMode, postgres.SSLMode)
+	require.Equal(t, platformresources.DefaultPostgresMaxOpenConns, postgres.Pool.MaxOpenConns)
+	require.Equal(t, platformresources.DefaultPostgresMaxIdleConns, postgres.Pool.MaxIdleConns)
+	require.Equal(t, platformresources.DefaultPostgresConnMaxLifetime, postgres.Pool.ConnMaxLifetime)
+	require.Equal(t, platformresources.DefaultPostgresConnMaxIdleTime, postgres.Pool.ConnMaxIdleTime)
 }
 
 // TestLoadParsesNestedResourceConfig 验证嵌套 Redis/PostgreSQL 资源配置被正确解析。
@@ -433,7 +433,7 @@ func TestLoadPreservesAdditionalNamedResourceAndAppliesDefaults(t *testing.T) {
 	cfg := loadServiceConfig(t, yaml)
 	require.Len(t, cfg.Resources.Redis, 2)
 	require.Equal(t, 7*time.Second, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
-	require.Equal(t, commonresources.DefaultRedisTimeout, cfg.Resources.Redis["queue_redis"].Timeout)
+	require.Equal(t, platformresources.DefaultRedisTimeout, cfg.Resources.Redis["queue_redis"].Timeout)
 }
 
 // TestLoadRepositoryConfigTargets 验证仓库内 Nacos 配置目录的目标环境保持一致。
@@ -459,7 +459,7 @@ func TestLoadRepositoryConfigTargets(t *testing.T) {
 			require.Equal(t, 120*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 			require.True(t, cfg.Server.HTTP.Enabled)
 			require.False(t, cfg.Server.GRPC.Enabled)
-			require.Equal(t, commonresources.RedisModeStandalone, cfg.Resources.Redis[serviceresources.NameCacheRedis].Mode)
+			require.Equal(t, platformresources.RedisModeStandalone, cfg.Resources.Redis[serviceresources.NameCacheRedis].Mode)
 			require.Equal(t, tt.redisAddr, cfg.Resources.Redis[serviceresources.NameCacheRedis].Addr)
 			require.Empty(t, cfg.Resources.Redis[serviceresources.NameCacheRedis].Addrs)
 			postgres := cfg.Resources.Postgres[serviceresources.NamePrimaryDB]
@@ -487,13 +487,13 @@ func TestLoadRepositoryConfigTargets(t *testing.T) {
 }
 
 // loadRepositoryConfigDocuments 读取指定环境的 base/resources/user-service 三份仓库配置文档。
-func loadRepositoryConfigDocuments(t *testing.T, environment string) []commonconfig.ConfigDocument {
+func loadRepositoryConfigDocuments(t *testing.T, environment string) []platformconfig.ConfigDocument {
 	t.Helper()
-	var docs []commonconfig.ConfigDocument
+	var docs []platformconfig.ConfigDocument
 	for _, dataID := range []string{"base.yaml", "resources.yaml", "user-service.yaml"} {
 		content, err := os.ReadFile(filepath.Join("..", "..", "..", "deployments", "nacos", environment, dataID))
 		require.NoError(t, err)
-		docs = append(docs, commonconfig.ConfigDocument{DataID: dataID, Content: content})
+		docs = append(docs, platformconfig.ConfigDocument{DataID: dataID, Content: content})
 	}
 	return docs
 }
@@ -503,7 +503,7 @@ func TestLoadFromTestDocumentsMergesLayeredServiceConfig(t *testing.T) {
 	// 为 render 断言显式注入非空资源密码，避免只覆盖 JWT secret 而遗漏具名资源凭据。
 	baseYAML := strings.Replace(serviceConfigYAML(), "      mode: cluster\n", "      mode: cluster\n      password: redis-secret-123\n", 1)
 	baseYAML = strings.Replace(baseYAML, "      password: \"\"", "      password: postgres-secret-123", 1)
-	docs := []commonconfig.ConfigDocument{
+	docs := []platformconfig.ConfigDocument{
 		{DataID: "base.yaml", Content: []byte(baseYAML)},
 		{DataID: "user-service.yaml", Content: []byte("log:\n  level: debug\n")},
 	}
@@ -516,7 +516,7 @@ func TestLoadFromTestDocumentsMergesLayeredServiceConfig(t *testing.T) {
 	require.NoError(t, err)
 	// RedactEffectiveSettings 必须返回副本；后续断言同时检查输出已脱敏、原 settings 未被修改。
 	redacted := RedactEffectiveSettings(settings)
-	rendered, err := commonconfig.RenderYAML(redacted)
+	rendered, err := platformconfig.RenderYAML(redacted)
 	require.NoError(t, err)
 	require.NotContains(t, string(rendered), "secret-123456789012345678901234567890")
 	require.NotContains(t, string(rendered), "redis-secret-123")
@@ -566,13 +566,13 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
 	yaml = strings.Replace(yaml, "ent:\n  plugins:\n    sql_log:\n      enabled: true\n    tracing:\n      enabled: false\n    metrics:\n      enabled: true\n", "ent: {}\n", 1)
 	yaml = strings.Replace(yaml, "      timeout: 7s\n", "", 1)
 	yaml = strings.Replace(yaml, "      sslmode: disable\n      pool:\n        max_open_conns: 20\n        max_idle_conns: 4\n        conn_max_lifetime: 45m\n        conn_max_idle_time: 12m\n", "", 1)
-	docs := []commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(yaml)}}
-	rawSettings, err := commonconfig.DeepMergeYAML(docs)
+	docs := []platformconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(yaml)}}
+	rawSettings, err := platformconfig.DeepMergeYAML(docs)
 	require.NoError(t, err)
-	wantDigest, err := commonconfig.DigestSettings(rawSettings)
+	wantDigest, err := platformconfig.DigestSettings(rawSettings)
 	require.NoError(t, err)
 
-	result, err := DecodeSettings(rawSettings, commonconfig.SourceMetadata{Provider: "testkit"})
+	result, err := DecodeSettings(rawSettings, platformconfig.SourceMetadata{Provider: "testkit"})
 	require.NoError(t, err)
 	settings, err := result.EffectiveSettings()
 	require.NoError(t, err)
@@ -605,8 +605,8 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
 	redis := resources["redis"].(map[string]any)
 	require.Equal(t, "5s", redis[serviceresources.NameCacheRedis].(map[string]any)["timeout"])
 	postgres := resources["postgres"].(map[string]any)[serviceresources.NamePrimaryDB].(map[string]any)
-	require.Equal(t, commonresources.DefaultPostgresSSLMode, postgres["sslmode"])
-	require.EqualValues(t, commonresources.DefaultPostgresMaxOpenConns, postgres["pool"].(map[string]any)["max_open_conns"])
+	require.Equal(t, platformresources.DefaultPostgresSSLMode, postgres["sslmode"])
+	require.EqualValues(t, platformresources.DefaultPostgresMaxOpenConns, postgres["pool"].(map[string]any)["max_open_conns"])
 	apiRateLimit := settings["api_rate_limit"].(map[string]any)
 	anonymous := apiRateLimit["anonymous"].(map[string]any)
 	require.Equal(t, true, anonymous["enabled"])
@@ -668,7 +668,7 @@ func TestLoadRejectsLegacyTopLevelResourcePath(t *testing.T) {
 // loadServiceConfig 加载一段 user-service 测试配置并要求成功。
 func loadServiceConfig(t *testing.T, content string) *Config {
 	t.Helper()
-	result, err := loadFromDocumentsForTest([]commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
+	result, err := loadFromDocumentsForTest([]platformconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
 	require.NoError(t, err)
 	return result.Config
 }
@@ -676,14 +676,14 @@ func loadServiceConfig(t *testing.T, content string) *Config {
 // loadServiceConfigError 加载一段预期失败的 user-service 测试配置并返回错误。
 func loadServiceConfigError(t *testing.T, content string) error {
 	t.Helper()
-	_, err := loadFromDocumentsForTest([]commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
+	_, err := loadFromDocumentsForTest([]platformconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
 	require.Error(t, err)
 	return err
 }
 
 // loadFromDocumentsForTest 使用测试文档解码配置，避免生产包暴露 fixture 来源 API。
-func loadFromDocumentsForTest(docs []commonconfig.ConfigDocument) (*LoadResult, error) {
-	settings, err := commonconfig.DeepMergeYAML(append([]commonconfig.ConfigDocument(nil), docs...))
+func loadFromDocumentsForTest(docs []platformconfig.ConfigDocument) (*LoadResult, error) {
+	settings, err := platformconfig.DeepMergeYAML(append([]platformconfig.ConfigDocument(nil), docs...))
 	if err != nil {
 		return nil, err
 	}
@@ -691,7 +691,7 @@ func loadFromDocumentsForTest(docs []commonconfig.ConfigDocument) (*LoadResult, 
 	for _, doc := range docs {
 		dataIDs = append(dataIDs, doc.DataID)
 	}
-	return DecodeSettings(settings, commonconfig.SourceMetadata{Provider: "testkit", DataIDs: dataIDs})
+	return DecodeSettings(settings, platformconfig.SourceMetadata{Provider: "testkit", DataIDs: dataIDs})
 }
 
 // serviceConfigYAML 返回覆盖 user-service 私有配置和共享 runtime 配置的基线 YAML。

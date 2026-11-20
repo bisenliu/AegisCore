@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/platform/runtime/logger"
 )
 
 // PolicyReloadEngine 定义 RBAC policy revision-aware reload 与只读投影状态能力。

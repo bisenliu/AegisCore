@@ -37,7 +37,7 @@ AegisCore 是面向后端服务的 Go workspace 项目底座，当前聚焦用�
 ## 5. 关键约束
 
 - 认证、授权和密码处理必须优先保证安全，不泄露凭证匹配细节。
-- API 响应、错误、分页和校验错误优先复用 `common/contract/` 与 `common/http/`。
+- API 响应、错误、分页和校验错误优先复用 `platform/contract/` 与 `platform/http/`。
 - 生产发布先执行 user-service `primary_db` migration，再执行 RBAC seed，最后启动或滚动 HTTP 副本。
 - 权限删除必须由受控 migration 先清理角色绑定再删除权限；seed 只按稳定 `permission_id` upsert，不自动删除权限。
 - OpenSpec 主规格和 OPSX 文档必须保持简体中文，技术标识符可保留原文。

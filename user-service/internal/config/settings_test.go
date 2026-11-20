@@ -7,15 +7,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	commonconfig "github.com/aegiscore/common/runtime/config"
-	commonresources "github.com/aegiscore/common/runtime/resources"
+	platformconfig "github.com/aegiscore/platform/runtime/config"
+	platformresources "github.com/aegiscore/platform/runtime/resources"
 )
 
 func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 	cfg := &Config{
-		Config: commonconfig.Config{
-			App:     commonconfig.AppConfig{Name: "user-service"},
-			Runtime: commonconfig.RuntimeConfig{Timezone: "Asia/Shanghai"},
+		Config: platformconfig.Config{
+			App:     platformconfig.AppConfig{Name: "user-service"},
+			Runtime: platformconfig.RuntimeConfig{Timezone: "Asia/Shanghai"},
 		},
 		Auth: AuthConfig{
 			JWT:                      JWTConfig{Secret: "secret", Issuer: "issuer"},
@@ -32,8 +32,8 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 		HTTP:         HTTPConfig{RequestBodyMaxBytes: 12345},
 		Ent:          EntConfig{Plugins: EntPluginsConfig{Metrics: EntMetricsPluginConfig{Enabled: true}}},
 		Resources: ResourcesConfig{
-			Redis:    commonresources.RedisConfigs{"cache_redis": {Mode: commonresources.RedisModeCluster, Addrs: []string{"redis:6379"}}},
-			Postgres: commonresources.PostgresConfigs{"primary_db": {Host: "postgres"}},
+			Redis:    platformresources.RedisConfigs{"cache_redis": {Mode: platformresources.RedisModeCluster, Addrs: []string{"redis:6379"}}},
+			Postgres: platformresources.PostgresConfigs{"primary_db": {Host: "postgres"}},
 		},
 	}
 

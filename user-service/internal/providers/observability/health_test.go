@@ -15,11 +15,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/localcache"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	commonresources "github.com/aegiscore/common/runtime/resources"
-	"github.com/aegiscore/common/runtime/workerpool"
+	"github.com/aegiscore/platform/runtime/config"
+	"github.com/aegiscore/platform/runtime/localcache"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
+	platformresources "github.com/aegiscore/platform/runtime/resources"
+	"github.com/aegiscore/platform/runtime/workerpool"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -31,7 +31,7 @@ func TestPostgresHealthChecker(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
-	checker := postgresHealthChecker{name: "postgres.primary_db", db: db, timeout: commonresources.DefaultPostgresPingTimeout()}
+	checker := postgresHealthChecker{name: "postgres.primary_db", db: db, timeout: platformresources.DefaultPostgresPingTimeout()}
 	require.Equal(t, "postgres.primary_db", checker.Name())
 	result := checker.Check(context.Background())
 	require.Equal(t, router.HealthCheckStatusOK, result.Status)
@@ -47,7 +47,7 @@ func TestRedisHealthChecker(t *testing.T) {
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 
-	checker := redisHealthChecker{name: "redis.cache_redis", client: client, timeout: commonresources.DefaultRedisTimeout}
+	checker := redisHealthChecker{name: "redis.cache_redis", client: client, timeout: platformresources.DefaultRedisTimeout}
 	require.Equal(t, "redis.cache_redis", checker.Name())
 	result := checker.Check(context.Background())
 	require.Equal(t, router.HealthCheckStatusOK, result.Status)
@@ -125,15 +125,15 @@ func TestWatcherHealthChecker(t *testing.T) {
 }
 
 func TestProvideHealthChecksUsesResourcePingTimeouts(t *testing.T) {
-	settings := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
-		"cache_redis": {Mode: commonresources.RedisModeCluster, Addrs: []string{"127.0.0.1:6379"}, Timeout: 2 * time.Second},
+	settings := serviceconfig.ResourceSettings{Redis: platformresources.RedisConfigs{
+		"cache_redis": {Mode: platformresources.RedisModeCluster, Addrs: []string{"127.0.0.1:6379"}, Timeout: 2 * time.Second},
 	}}
 	checks := ProvideHealthChecks(HealthCheckParams{Resources: settings, RBAC: serviceconfig.RBACSettings{PolicyWatcher: serviceconfig.DefaultPolicyWatcherConfig()}})
 
 	require.Len(t, checks.Readiness, 4)
 	postgres, ok := checks.Readiness[0].(postgresHealthChecker)
 	require.True(t, ok)
-	require.Equal(t, commonresources.DefaultPostgresPingTimeout(), postgres.timeout)
+	require.Equal(t, platformresources.DefaultPostgresPingTimeout(), postgres.timeout)
 	redis, ok := checks.Readiness[1].(redisHealthChecker)
 	require.True(t, ok)
 	require.Equal(t, 2*time.Second, redis.timeout)
@@ -142,13 +142,13 @@ func TestProvideHealthChecksUsesResourcePingTimeouts(t *testing.T) {
 }
 
 func TestProvideHealthChecksAppliesDefaultRedisPingTimeout(t *testing.T) {
-	settings := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
-		"cache_redis": {Mode: commonresources.RedisModeCluster, Addrs: []string{"127.0.0.1:6379"}},
+	settings := serviceconfig.ResourceSettings{Redis: platformresources.RedisConfigs{
+		"cache_redis": {Mode: platformresources.RedisModeCluster, Addrs: []string{"127.0.0.1:6379"}},
 	}}
 	checks := ProvideHealthChecks(HealthCheckParams{Resources: settings, RBAC: serviceconfig.RBACSettings{PolicyWatcher: serviceconfig.DefaultPolicyWatcherConfig()}})
 
 	redis := checks.Readiness[1].(redisHealthChecker)
-	require.Equal(t, commonresources.DefaultRedisTimeout, redis.timeout)
+	require.Equal(t, platformresources.DefaultRedisTimeout, redis.timeout)
 }
 
 func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
@@ -167,11 +167,11 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 		},
 	}
 	settings := serviceconfig.ResourceSettings{
-		Redis: commonresources.RedisConfigs{
+		Redis: platformresources.RedisConfigs{
 			"cache_redis": {Timeout: time.Second},
 		},
 	}
-	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+	provider, err := platformmetrics.NewProvider(platformmetrics.Options{
 		Config:      runtimeCfg.Observability.Metrics,
 		ServiceName: runtimeCfg.App.Name,
 		Environment: runtimeCfg.App.Environment,
@@ -270,7 +270,7 @@ func (s fakeLocalcacheStatsSource) Stats() localcache.Stats {
 	return s.stats
 }
 
-func gatherProviderText(t *testing.T, provider *commonmetrics.Provider) string {
+func gatherProviderText(t *testing.T, provider *platformmetrics.Provider) string {
 	t.Helper()
 	families, err := provider.Gatherer().Gather()
 	require.NoError(t, err)

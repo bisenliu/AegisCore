@@ -12,7 +12,7 @@ import (
 	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/workerpool"
+	"github.com/aegiscore/platform/runtime/workerpool"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 

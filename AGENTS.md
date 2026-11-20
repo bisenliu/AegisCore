@@ -18,8 +18,8 @@
 
 | 路径 | 作用 |
 |---|---|
-| `go.work` | Go workspace，包含 `common`、根目录业务服务和仓库级工具模块；仓库根目录不是单一 Go module |
-| `common/` | 跨服务共享契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力 |
+| `go.work` | Go workspace，包含 `platform`、根目录业务服务和仓库级工具模块；仓库根目录不是单一 Go module |
+| `platform/` | 跨服务共享契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力 |
 | `user-service/` | 当前用户服务，位于仓库根目录；新业务服务同样位于根目录，不引入 `services/` |
 | `tools/` | 仓库级交付工具，例如跨服务复用的 OpenAPI 转换 CLI |
 | `deployments/` | Docker、Compose、Helm、Prometheus 和 Grafana 部署观测资产；Kubernetes 清单只由 Helm 渲染 |
@@ -27,9 +27,9 @@
 | `openspec/specs/` | 当前有效主规格，描述长期稳定 capability |
 | `openspec/changes/` | 进行中的 proposal、design、spec delta 和 tasks；完成后合并主规格并删除，不保留历史归档 |
 
-根目录业务服务与 `user-service/` 平级。新增服务时登记根 `Makefile` 的 `BUSINESS_SERVICES` 和 `go.work`，module path 使用 `github.com/aegiscore/<service>`。服务只能依赖 `common/`，不得 import 其他业务服务；需要共享的稳定契约再放入 `common/contract`。不要把服务移动到 `services/`。
+根目录业务服务与 `user-service/` 平级。新增服务时登记根 `Makefile` 的 `BUSINESS_SERVICES` 和 `go.work`，module path 使用 `github.com/aegiscore/<service>`。服务只能依赖 `platform/`，不得 import 其他业务服务；需要共享的稳定契约再放入 `platform/contract`。不要把服务移动到 `services/`。
 
-`common/` 只承载跨服务稳定能力：`contract/errors`、`contract/pagination`、`contract/response`、`http/binding`、`http/middleware`、`http/openapi`、`http/pprof`、`http/response`、`runtime/config`、`runtime/datastore`、`runtime/id`、`runtime/localcache`、`runtime/logger`、`runtime/observability`、`runtime/redispubsub`、`runtime/rediskey`、`runtime/resources`、`runtime/scheduler`、`runtime/timezone`、`runtime/workerpool`、`security/auth`、`security/casbin`、`security/password`、`testing` 和 `validation`。
+`platform/` 只承载跨服务稳定能力：`contract/errors`、`contract/pagination`、`contract/response`、`http/binding`、`http/middleware`、`http/openapi`、`http/pprof`、`http/response`、`runtime/config`、`runtime/datastore`、`runtime/id`、`runtime/localcache`、`runtime/logger`、`runtime/observability`、`runtime/redispubsub`、`runtime/rediskey`、`runtime/resources`、`runtime/scheduler`、`runtime/timezone`、`runtime/workerpool`、`security/auth`、`security/casbin`、`security/password`、`testing` 和 `validation`。
 
 `user-service/internal/` 的主要边界：
 
@@ -76,7 +76,7 @@ make verify
 make user-service-build
 make user-service-run
 make user-service-architecture-lint
-make common-test
+make platform-test
 make user-service-test
 ```
 
@@ -133,11 +133,11 @@ openspec init --tools none --force
 
 ## 8. 架构边界
 
-- `common/` 不依赖 `user-service/internal/features/`，也不承载 user-service 业务 DTO、feature key schema、policy loader、route diff、OpenAPI 服务元数据、eventbus、outbox 或推测性 helper。
-- `common/http/openapi` 只承载 Swagger/OpenAPI 转换、规范化、序列化和 Go embed 渲染 helper；`tools/openapi-convert` 承载仓库级转换 CLI；服务 API server、认证方案、扫描范围和输出目录由服务脚本拥有。
-- `common/security/casbin` 只承载通用请求三元组和 authorizer 包装；user-service subject schema、权限目录、策略加载、超级管理员基线和 route diff 留在 permission/shared 边界。
-- `common/runtime/workerpool`、`scheduler`、`redispubsub`、`rediskey`、`localcache` 只提供无业务语义 primitive；auth/user/role/permission 的 key schema、消息 envelope、revision、数据库校准、缓存策略和安全语义留在对应 feature。
-- `user-service/internal/shared/` 只允许至少两个 feature 真实消费、边界稳定且不能归入 `common` 的服务内业务内核；当前只开放 `identity` 与 `rbacbaseline`。
+- `platform/` 不依赖 `user-service/internal/features/`，也不承载 user-service 业务 DTO、feature key schema、policy loader、route diff、OpenAPI 服务元数据、eventbus、outbox 或推测性 helper。
+- `platform/http/openapi` 只承载 Swagger/OpenAPI 转换、规范化、序列化和 Go embed 渲染 helper；`tools/openapi-convert` 承载仓库级转换 CLI；服务 API server、认证方案、扫描范围和输出目录由服务脚本拥有。
+- `platform/security/casbin` 只承载通用请求三元组和 authorizer 包装；user-service subject schema、权限目录、策略加载、超级管理员基线和 route diff 留在 permission/shared 边界。
+- `platform/runtime/workerpool`、`scheduler`、`redispubsub`、`rediskey`、`localcache` 只提供无业务语义 primitive；auth/user/role/permission 的 key schema、消息 envelope、revision、数据库校准、缓存策略和安全语义留在对应 feature。
+- `user-service/internal/shared/` 只允许至少两个 feature 真实消费、边界稳定且不能归入 `platform` 的服务内业务内核；当前只开放 `identity` 与 `rbacbaseline`。
 - `user-service/internal/shared/` 不引入 feature 包、Gin、Ent、Redis、SQL、Fx、runtime config/logger/datastore、HTTP response envelope、controller、DTO、store port、use case、外部调用或部署资产。
 - feature 内保持 domain、application、transport、infrastructure 分层；application/domain/infrastructure 不导入 feature HTTP transport DTO 或 controller。
 - HTTP controller 先用 `binding.BindOrAbort`，再调用 feature-local input preparer 进行裁剪、默认值归一化、UUID/cursor/token 解析和 command/query 构造；input preparer 不查询 store、不调用 use case、不执行授权、不写 HTTP 响应。
@@ -150,11 +150,11 @@ openspec init --tools none --force
 
 ## 9. 高风险区域
 
-- 认证、refresh session、强制改密和 token version：`user-service/internal/features/auth/`、`common/security/auth/`。
-- RBAC、policy sync 和 Casbin：`user-service/internal/features/permission/`、`user-service/internal/features/role/`、`user-service/internal/shared/rbacbaseline/`、`common/security/casbin/`。
+- 认证、refresh session、强制改密和 token version：`user-service/internal/features/auth/`、`platform/security/auth/`。
+- RBAC、policy sync 和 Casbin：`user-service/internal/features/permission/`、`user-service/internal/features/role/`、`user-service/internal/shared/rbacbaseline/`、`platform/security/casbin/`。
 - 数据库 schema 和 migration：`user-service/internal/persistence/ent/schema/`、`user-service/migrations/`。
 - OpenAPI 生成物：`user-service/docs/openapi.go`、`user-service/docs/openapi.json`、`user-service/docs/openapi.yaml`。
-- 可观测性：`common/runtime/observability/`、`common/runtime/logger/`、`common/http/middleware/`、`deployments/observability/`、`deployments/compose/grafana/`。
+- 可观测性：`platform/runtime/observability/`、`platform/runtime/logger/`、`platform/http/middleware/`、`deployments/observability/`、`deployments/compose/grafana/`。
 - 部署发布：SQL migration 通过 DBA 工单或受控发布平台人工或受控执行；普通 user-service 运行时镜像不包含 Atlas，不执行 migration，`RUN_MIGRATIONS=true` 已废弃。
 
 ## 10. 交付检查

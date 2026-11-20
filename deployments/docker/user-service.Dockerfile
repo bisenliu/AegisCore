@@ -8,7 +8,7 @@ FROM golang:1.27.4-alpine3.24@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fb
 WORKDIR /src
 
 COPY go.work go.work.sum ./
-COPY common/go.mod common/go.sum ./common/
+COPY platform/go.mod platform/go.sum ./platform/
 COPY tools/nacos-config-seed/go.mod ./tools/nacos-config-seed/
 COPY tools/openapi-convert/go.mod ./tools/openapi-convert/
 COPY user-service/go.mod user-service/go.sum ./user-service/
@@ -16,7 +16,7 @@ COPY user-service/go.mod user-service/go.sum ./user-service/
 RUN --mount=type=cache,target=/go/pkg/mod \
   go list -m -mod=readonly all >/dev/null
 
-COPY common ./common
+COPY platform ./platform
 COPY user-service ./user-service
 
 WORKDIR /src/user-service
