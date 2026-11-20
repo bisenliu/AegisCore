@@ -82,4 +82,6 @@ func TestStartRedisIntegration(t *testing.T) {
 	})
 	defer clusterClient.Close()
 	require.NoError(t, clusterClient.Ping(ctx).Err())
+	// 写操作会在集群仍处于 fail 时返回 CLUSTERDOWN，因此不能只以 PING 判断就绪。
+	require.NoError(t, clusterClient.Set(ctx, "aegiscore:testcontainers:write-probe", "ok", time.Minute).Err())
 }

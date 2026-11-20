@@ -18,6 +18,8 @@ const (
 	DefaultRedisImage = "redis:7-alpine"
 	// defaultRedisPort 是 Redis 容器内默认监听的内部端口与协议。
 	defaultRedisPort = "6379/tcp"
+	// clusterReadyProbeKey 是确认集群已可写的临时探测键，测试结束后随容器删除。
+	clusterReadyProbeKey = "aegiscore:testcontainers:cluster-ready"
 )
 
 // RedisOptions 配置 Redis 测试容器；零值字段由 StartRedis 补为测试默认值。
@@ -99,15 +101,29 @@ func normalizeRedisOptions(opts RedisOptions) RedisOptions {
 	return opts
 }
 
-// waitForRedis 等到测试 Redis 可以响应；超时就让测试失败。
+// waitForRedis 等到单节点测试集群真正可写；普通 PING 成功不代表集群状态已恢复。
+//
+// Redis 给刚分配槽位的主节点保留一段不可写时间，用于避免重启后过早重新加入集群。
+// 这段时间内 CLUSTER INFO 仍是 fail，业务使用的 ClusterClient 会返回 CLUSTERDOWN。
 func waitForRedis(ctx context.Context, t testing.TB, redisContainer *RedisContainer) {
 	t.Helper()
-	client := redis.NewClient(redisContainer.Options())
+	client := redis.NewClusterClient(clusterOptions(redisContainer.Config()))
 	defer func() { _ = client.Close() }()
 
-	waitFor(ctx, t, "Redis ping", func(ctx context.Context) error {
-		return client.Ping(ctx).Err()
+	waitFor(ctx, t, "Redis cluster writable", func(ctx context.Context) error {
+		return client.Set(ctx, clusterReadyProbeKey, "ok", time.Minute).Err()
 	})
+}
+
+// clusterOptions 按测试容器公布的地址构造与业务客户端相同的 Redis Cluster 连接参数。
+func clusterOptions(cfg resources.RedisConfig) *redis.ClusterOptions {
+	return &redis.ClusterOptions{
+		Addrs:        append([]string(nil), cfg.Addrs...),
+		DialTimeout:  cfg.Timeout,
+		ReadTimeout:  cfg.Timeout,
+		WriteTimeout: cfg.Timeout,
+		MaxRedirects: cfg.Cluster.MaxRedirects,
+	}
 }
 
 // configureRedisClusterAnnouncement 让测试集群对外公布本机映射地址，否则客户端连不上。
