@@ -8,8 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/config"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	"github.com/aegiscore/platform/runtime/config"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 )
 
 func TestNewGinEngineRecordsHTTPServerMetrics(t *testing.T) {
@@ -27,15 +27,15 @@ func TestNewGinEngineRecordsHTTPServerMetrics(t *testing.T) {
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil))
 
 	metric := findGinMetricByLabels(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), map[string]string{
-		commonmetrics.LabelMethod:      http.MethodGet,
-		commonmetrics.LabelRoute:       "/api/v1/users/:user_id",
-		commonmetrics.LabelStatusClass: "2xx",
+		platformmetrics.LabelMethod:      http.MethodGet,
+		platformmetrics.LabelRoute:       "/api/v1/users/:user_id",
+		platformmetrics.LabelStatusClass: "2xx",
 	})
 	require.Equal(t, float64(1), metric.GetCounter().GetValue())
 	duration := findGinMetricByLabels(t, gatherGinMetricFamily(t, metricsProvider, "http_server_request_duration_seconds"), map[string]string{
-		commonmetrics.LabelMethod:      http.MethodGet,
-		commonmetrics.LabelRoute:       "/api/v1/users/:user_id",
-		commonmetrics.LabelStatusClass: "2xx",
+		platformmetrics.LabelMethod:      http.MethodGet,
+		platformmetrics.LabelRoute:       "/api/v1/users/:user_id",
+		platformmetrics.LabelStatusClass: "2xx",
 	})
 	require.Equal(t, uint64(1), duration.GetHistogram().GetSampleCount())
 	assertGinMetricFamilyMissingLabelValue(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), "/api/v1/users/123")
@@ -78,9 +78,9 @@ func TestNewGinEngineRecordsUnmatchedRouteWithStableFallback(t *testing.T) {
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil))
 
 	metric := findGinMetricByLabels(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), map[string]string{
-		commonmetrics.LabelMethod:      http.MethodGet,
-		commonmetrics.LabelRoute:       "__unmatched__",
-		commonmetrics.LabelStatusClass: "4xx",
+		platformmetrics.LabelMethod:      http.MethodGet,
+		platformmetrics.LabelRoute:       "__unmatched__",
+		platformmetrics.LabelStatusClass: "4xx",
 	})
 	require.Equal(t, float64(1), metric.GetCounter().GetValue())
 	assertGinMetricFamilyMissingLabelValue(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), "/api/v1/users/123")

@@ -18,11 +18,11 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	commonmw "github.com/aegiscore/common/http/middleware"
-	"github.com/aegiscore/common/runtime/config"
-	commonauth "github.com/aegiscore/common/security/auth"
-	commonvalidation "github.com/aegiscore/common/validation"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	platformmw "github.com/aegiscore/platform/http/middleware"
+	"github.com/aegiscore/platform/runtime/config"
+	platformauth "github.com/aegiscore/platform/security/auth"
+	platformvalidation "github.com/aegiscore/platform/validation"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
@@ -147,7 +147,7 @@ func TestRegisterUserServiceHTTPRoutesRecordsRateLimitObservability(t *testing.T
 	metricsCfg := metricsRouteConfig(true, "/internal/metrics")
 	params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{
 		metrics:          metricsCfg,
-		anonymousLimiter: &routerRegistrationLimiter{err: commonmw.ErrRateLimitKeyRequired},
+		anonymousLimiter: &routerRegistrationLimiter{err: platformmw.ErrRateLimitKeyRequired},
 		userLimiter:      &routerRegistrationLimiter{allowed: false},
 	})
 	params.Log = zap.New(core)
@@ -174,7 +174,7 @@ func TestRegisterUserServiceHTTPRoutesRecordsCapacityReasonsWithoutKeyLabels(t *
 	metricsCfg := metricsRouteConfig(true, "/internal/metrics")
 	params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{
 		metrics:          metricsCfg,
-		anonymousLimiter: &routerRegistrationLimiter{allowed: true, err: commonmw.ErrRateLimitCapacityOverflow},
+		anonymousLimiter: &routerRegistrationLimiter{allowed: true, err: platformmw.ErrRateLimitCapacityOverflow},
 	})
 	params.Log = zap.New(core)
 	engine := gin.New()
@@ -270,8 +270,8 @@ type routerRegisteredRoute struct {
 type routerRegistrationRouteOptions struct {
 	metrics          config.MetricsConfig
 	authorizer       permissionauthorization.Authorizer
-	anonymousLimiter commonmw.RateLimiter
-	userLimiter      commonmw.RateLimiter
+	anonymousLimiter platformmw.RateLimiter
+	userLimiter      platformmw.RateLimiter
 }
 
 type routerRegistrationAuthorizer struct {
@@ -390,13 +390,13 @@ func metricLabelsMatch(metric *io_prometheus_client.Metric, want map[string]stri
 	return true
 }
 
-func newRouterRegistrationAuthController(validator *commonvalidation.Validator) *authhttp.AuthController {
+func newRouterRegistrationAuthController(validator *platformvalidation.Validator) *authhttp.AuthController {
 	return authhttp.NewAuthController(authhttp.AuthControllerOptions{Validator: validator})
 }
 
-func newRouterRegistrationValidator(t *testing.T) *commonvalidation.Validator {
+func newRouterRegistrationValidator(t *testing.T) *platformvalidation.Validator {
 	t.Helper()
-	validator, err := commonvalidation.NewDefault()
+	validator, err := platformvalidation.NewDefault()
 	require.NoError(t, err)
 	return validator
 }
@@ -443,7 +443,7 @@ func executeRouterRegistrationRequest(engine *gin.Engine, method string, path st
 		request.Header.Set("Content-Type", "application/json")
 	}
 	if accessToken != "" {
-		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+accessToken)
+		request.Header.Set(platformauth.AuthorizationHeader, platformauth.TokenPrefix+accessToken)
 	}
 	engine.ServeHTTP(recorder, request)
 	return recorder
@@ -465,16 +465,16 @@ type routerRegistrationClaims struct {
 
 type routerRegistrationAccessVerifier struct{}
 
-func (routerRegistrationAccessVerifier) VerifyAccessToken(token string) (commonauth.AccessToken, error) {
+func (routerRegistrationAccessVerifier) VerifyAccessToken(token string) (platformauth.AccessToken, error) {
 	claims := &routerRegistrationClaims{}
 	parsed, err := jwtv5.ParseWithClaims(token, claims, func(*jwtv5.Token) (any, error) { return []byte("router-registration-secret"), nil }, jwtv5.WithExpirationRequired())
 	if err != nil {
-		return commonauth.AccessToken{}, err
+		return platformauth.AccessToken{}, err
 	}
 	if parsed == nil || !parsed.Valid || claims.Subject != "access" {
-		return commonauth.AccessToken{}, jwtv5.ErrTokenInvalidClaims
+		return platformauth.AccessToken{}, jwtv5.ErrTokenInvalidClaims
 	}
-	return commonauth.AccessToken{UserID: claims.UserID, SessionID: claims.SessionID, TokenVersion: claims.TokenVersion}, nil
+	return platformauth.AccessToken{UserID: claims.UserID, SessionID: claims.SessionID, TokenVersion: claims.TokenVersion}, nil
 }
 
 func routerRegistrationRuntimeRoutes() []routerRegisteredRoute {

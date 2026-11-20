@@ -159,7 +159,7 @@ jobs:
       fail-fast: false
       matrix:
         module:
-          - common
+          - platform
           - user-service
     steps:
       - name: Checkout
@@ -202,8 +202,8 @@ jobs:
       fail-fast: false
       matrix:
         module:
-          - name: common
-            path: common
+          - name: platform
+            path: platform
           - name: user-service
             path: user-service
           - name: tools-openapi-convert
@@ -237,8 +237,8 @@ jobs:
       fail-fast: false
       matrix:
         module:
-          - name: common
-            path: common
+          - name: platform
+            path: platform
           - name: user-service
             path: user-service
           - name: tools-openapi-convert

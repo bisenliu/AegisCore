@@ -7,7 +7,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/platform/runtime/logger"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )

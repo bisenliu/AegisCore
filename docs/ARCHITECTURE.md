@@ -6,45 +6,45 @@ AegisCore 是 Go 1.27.4 workspace，当前由四个主要部分组成：
 
 | 模块 | 职责 |
 |---|---|
-| `common/` | 跨服务稳定契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力 |
+| `platform/` | 跨服务稳定契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力 |
 | `user-service/` | 当前用户服务，位于仓库根目录；后续业务服务同样与它平级，不集中到 `services/` |
 | `tools/` | 仓库级交付工具，例如跨服务复用的 OpenAPI 转换 CLI |
 | `deployments/` | Docker、Compose、Helm、Prometheus 和 Grafana 部署观测资产；Kubernetes 清单只由 Helm 渲染 |
 
 根 `Makefile` 通过 `BUSINESS_SERVICES` 汇总已登记根目录业务服务的构建、测试、lint、verify、migration 和 OpenAPI 命令。新增服务时把目录名追加到该清单，并在 `go.work` 登记对应 module；服务私有命令仍保留 `<service>-` 前缀。业务服务之间不得互相 import。README 将 `docs/` 与 `openspec/` 定义为协作和规格入口。
 
-## 2. `common/` 共享基础
+## 2. `platform/` 共享基础
 
-`common/` 是跨服务复用层，不依赖 `user-service` 的 feature 实现。
+`platform/` 是跨服务复用层，不依赖 `user-service` 的 feature 实现。
 
 | 路径 | 职责 |
 |---|---|
-| `common/contract/errors/` | 统一错误码、错误对象和转换 |
-| `common/contract/response/` | 统一响应 envelope 和消息 |
-| `common/contract/pagination/` | 分页数据结构和 helper |
-| `common/http/binding/` | Gin 请求绑定与校验衔接 |
-| `common/http/client/` | 基于可复用 Resty client 的业务中立出站请求、timeout、代理与状态错误 helper |
-| `common/http/middleware/` | auth、casbin、cors、logging、metrics、recovery 和 span error |
-| `common/http/openapi/` | OpenAPI 转换和渲染 helper |
-| `common/http/response/` | HTTP 响应写入和错误响应 |
-| `common/runtime/config/` | 仅包含 app/server/log/observability 的跨服务核心配置、严格 YAML loader 和 validation primitive |
-| `common/runtime/resources/` | 无业务语义的 Redis/PostgreSQL 资源类型、默认值和校验；具名资源由服务声明 |
-| `common/runtime/datastore/` | Postgres、Redis 和 Fx provider |
-| `common/runtime/httpserver/` | 业务中立的 `net/http` 同步监听、异步服务、异常分类、优雅关闭、强制关闭和 handler drain 生命周期 |
-| `common/runtime/redispubsub/` | Redis classic Pub/Sub 单 channel 订阅确认、阻塞接收、有界背压、退避重连和单向生命周期 |
-| `common/runtime/logger/` | 写 stdout/stderr 的 zap logger |
-| `common/runtime/observability/` | metrics 与 tracing provider |
-| `common/runtime/scheduler/` | scheduler、lock、metrics 和 logger |
-| `common/runtime/workerpool/` | 固定 worker pool、stats 和 errors |
-| `common/security/` | JWT verifier、token version validator 契约、Casbin authorizer、password hash |
-| `common/testing/` | Postgres/Redis Testcontainers 和 fixtures |
-| `common/validation/` | validator、翻译、字段和错误 |
+| `platform/contract/errors/` | 统一错误码、错误对象和转换 |
+| `platform/contract/response/` | 统一响应 envelope 和消息 |
+| `platform/contract/pagination/` | 分页数据结构和 helper |
+| `platform/http/binding/` | Gin 请求绑定与校验衔接 |
+| `platform/http/client/` | 基于可复用 Resty client 的业务中立出站请求、timeout、代理与状态错误 helper |
+| `platform/http/middleware/` | auth、casbin、cors、logging、metrics、recovery 和 span error |
+| `platform/http/openapi/` | OpenAPI 转换和渲染 helper |
+| `platform/http/response/` | HTTP 响应写入和错误响应 |
+| `platform/runtime/config/` | 仅包含 app/server/log/observability 的跨服务核心配置、严格 YAML loader 和 validation primitive |
+| `platform/runtime/resources/` | 无业务语义的 Redis/PostgreSQL 资源类型、默认值和校验；具名资源由服务声明 |
+| `platform/runtime/datastore/` | Postgres、Redis 和 Fx provider |
+| `platform/runtime/httpserver/` | 业务中立的 `net/http` 同步监听、异步服务、异常分类、优雅关闭、强制关闭和 handler drain 生命周期 |
+| `platform/runtime/redispubsub/` | Redis classic Pub/Sub 单 channel 订阅确认、阻塞接收、有界背压、退避重连和单向生命周期 |
+| `platform/runtime/logger/` | 写 stdout/stderr 的 zap logger |
+| `platform/runtime/observability/` | metrics 与 tracing provider |
+| `platform/runtime/scheduler/` | scheduler、lock、metrics 和 logger |
+| `platform/runtime/workerpool/` | 固定 worker pool、stats 和 errors |
+| `platform/security/` | JWT verifier、token version validator 契约、Casbin authorizer、password hash |
+| `platform/testing/` | Postgres/Redis Testcontainers 和 fixtures |
+| `platform/validation/` | validator、翻译、字段和错误 |
 
 Scheduler 对外只暴露固定 key 的注册/删除和生命周期操作，以 nil/non-nil lock、renew policy 以及 `WaitTimeout` 表达策略。内部不可导出的 pipeline 固定串联本地 overlap、全局并发、Redis lock、任务 context、续租与结果观测，每个 stage 通过局部 `defer` 释放自身资源；completed/failed duration 从任务 started 计算，不包含 gate 或 lock wait。全局/锁 wait 在高频且允许 overlap 时可能积累等待 goroutine，不等价于有界任务队列。Redis owner-token lock 仍是 lease，不提供 exactly-once 或 fencing 保证。
 
-`common/runtime/redispubsub` 只管理一个 Redis classic Pub/Sub channel 的 subscription lifecycle：调用方必须显式提供全部 options，subscriber 等待订阅确认后阻塞接收，以固定容量 channel 施加 context-aware 背压，并在失败后按带抖动的有界指数退避重连。每个 attempt 只关闭自己拥有的 PubSub，不关闭共享 Redis client。该 primitive 不提供 publish envelope、revision、outbox、数据库校准、缓存失效、pattern/sharded subscription、Redis Streams 或可靠投递；Redis Pub/Sub 仍是可丢失的 at-most-once 通知。
+`platform/runtime/redispubsub` 只管理一个 Redis classic Pub/Sub channel 的 subscription lifecycle：调用方必须显式提供全部 options，subscriber 等待订阅确认后阻塞接收，以固定容量 channel 施加 context-aware 背压，并在失败后按带抖动的有界指数退避重连。每个 attempt 只关闭自己拥有的 PubSub，不关闭共享 Redis client。该 primitive 不提供 publish envelope、revision、outbox、数据库校准、缓存失效、pattern/sharded subscription、Redis Streams 或可靠投递；Redis Pub/Sub 仍是可丢失的 at-most-once 通知。
 
-`common/runtime/httpserver` 只管理一个 `net/http` server 的生命周期：`New` 严格校验调用方提供的全部 options 且不产生监听或 goroutine，`Start` 同步绑定地址后异步 `Serve`，`Stop` 以唯一后台 cleanup 统一执行 Shutdown、listener 显式关闭、必要时强制 Close、handler drain 和 Serve goroutine 等待。实例从 created 进入 running，异常 Serve 可进入 failed，停止后固定进入 stopped 且不能重启；并发 Stop 共享最终结果，单个调用方 context 到期不会取消后台 cleanup。该 primitive 不依赖 Gin、Fx、服务配置或业务日志，也不管理 hijacked connection、WebSocket、进程外负载均衡 drain 或无法协作退出的 goroutine。
+`platform/runtime/httpserver` 只管理一个 `net/http` server 的生命周期：`New` 严格校验调用方提供的全部 options 且不产生监听或 goroutine，`Start` 同步绑定地址后异步 `Serve`，`Stop` 以唯一后台 cleanup 统一执行 Shutdown、listener 显式关闭、必要时强制 Close、handler drain 和 Serve goroutine 等待。实例从 created 进入 running，异常 Serve 可进入 failed，停止后固定进入 stopped 且不能重启；并发 Stop 共享最终结果，单个调用方 context 到期不会取消后台 cleanup。该 primitive 不依赖 Gin、Fx、服务配置或业务日志，也不管理 hijacked connection、WebSocket、进程外负载均衡 drain 或无法协作退出的 goroutine。
 
 ## 3. `user-service` 运行入口
 
@@ -57,7 +57,7 @@ Scheduler 对外只暴露固定 key 的注册/删除和生命周期操作，以 
 - `config validate|render|sources`：验证 Nacos 配置、脱敏渲染最终配置和展示实际来源。
 - `healthcheck --url <url> --timeout <duration>`：在容器内无 shell、wget、curl 或 grep 依赖地检查 `/readyz`。
 
-`user-service/internal/bootstrap/` 构造应用，并以 `HTTPRuntime` 和 `PprofRuntime` 显式表达业务 HTTP 与默认关闭的独立 pprof 诊断监听。bootstrap 只负责 enabled 策略、配置到 `httpserver.Options` 的映射、Fx hook、服务日志和异常退出信号，不拥有通用 listener、Serve、Shutdown、Close 或 drain 状态机；两个 runtime 各自持有独立的 `httpserver.Managed`。`AppOptions` 接收 CLI 已解析的 service config、派生共享 runtime config 和组装 Fx options。`user-service/internal/config/` 拥有服务根配置、认证/RBAC feature cache、Ent 配置、具名 resources 和服务级校验，并复用 `common/runtime/config` 的 Nacos 来源解析、YAML deep merge、strict decode、digest 和脱敏能力。`user-service/internal/providers/` 是服务级 provider 汇总入口，只组合子模块，不承载具体 provider 构造器；`providers/datastore/` 承载 PostgreSQL、Redis、Ent client、Ent plugins、Ent SQL log、Ent metrics 和 Ent tracing 接线；PostgreSQL、Redis 与 Ent constructor 接收 composition root 传入的资源名，不写死名称，也不遍历配置自动连接未登记资源；`providers/observability/` 承载 health checks、runtime dependency metrics、metrics provider 和 tracing provider 接线；`providers/security/` 承载 JWT service、认证 token policy 和 password service 接线；`providers/transport/` 承载 Gin mode、Gin engine、routes 和 API rate limiters 接线。providers 不读取配置来源。版本化本地 Nacos 配置位于 `deployments/nacos/local-host/` 与 `deployments/nacos/local-docker/`，每个目录都是对应 Namespace 的完整三文档发布源；`tools/nacos-config-seed` 只负责将指定目录发布到指定 Namespace。
+`user-service/internal/bootstrap/` 构造应用，并以 `HTTPRuntime` 和 `PprofRuntime` 显式表达业务 HTTP 与默认关闭的独立 pprof 诊断监听。bootstrap 只负责 enabled 策略、配置到 `httpserver.Options` 的映射、Fx hook、服务日志和异常退出信号，不拥有通用 listener、Serve、Shutdown、Close 或 drain 状态机；两个 runtime 各自持有独立的 `httpserver.Managed`。`AppOptions` 接收 CLI 已解析的 service config、派生共享 runtime config 和组装 Fx options。`user-service/internal/config/` 拥有服务根配置、认证/RBAC feature cache、Ent 配置、具名 resources 和服务级校验，并复用 `platform/runtime/config` 的 Nacos 来源解析、YAML deep merge、strict decode、digest 和脱敏能力。`user-service/internal/providers/` 是服务级 provider 汇总入口，只组合子模块，不承载具体 provider 构造器；`providers/datastore/` 承载 PostgreSQL、Redis、Ent client、Ent plugins、Ent SQL log、Ent metrics 和 Ent tracing 接线；PostgreSQL、Redis 与 Ent constructor 接收 composition root 传入的资源名，不写死名称，也不遍历配置自动连接未登记资源；`providers/observability/` 承载 health checks、runtime dependency metrics、metrics provider 和 tracing provider 接线；`providers/security/` 承载 JWT service、认证 token policy 和 password service 接线；`providers/transport/` 承载 Gin mode、Gin engine、routes 和 API rate limiters 接线。providers 不读取配置来源。版本化本地 Nacos 配置位于 `deployments/nacos/local-host/` 与 `deployments/nacos/local-docker/`，每个目录都是对应 Namespace 的完整三文档发布源；`tools/nacos-config-seed` 只负责将指定目录发布到指定 Namespace。
 
 ## 4. HTTP 路由结构
 
@@ -99,7 +99,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 
 `domain/` 和 `application/` 生产代码保持框架无关，不承载仅服务于 Fx DI 的 import、`fx.In` 或 `name`/`optional` tag；无 DI metadata 需求的普通 application 构造器由 feature 根 `fx.go` 直接注册，确有 named/optional 等 metadata 或配置转换需求时才由 composition adapter 转换。Go import 分层约束由根 `.golangci.yml` 的 `depguard` 检查，DI metadata 和生成物 drift 等跨文件约束由 `user-service/scripts/architecture/lint.sh` 检查。
 
-真实外部 HTTP 系统的消费侧端口、DTO、认证、retry policy、业务错误映射和防腐逻辑仍位于 `user-service/internal/integration/http` 或所属 feature；`common/http/client` 只提供 Resty client 复用、单次请求构造与发送原语，消费侧可注入预配置的 Resty client。
+真实外部 HTTP 系统的消费侧端口、DTO、认证、retry policy、业务错误映射和防腐逻辑仍位于 `user-service/internal/integration/http` 或所属 feature；`platform/http/client` 只提供 Resty client 复用、单次请求构造与发送原语，消费侧可注入预配置的 Resty client。
 
 ## 6. 核心流程
 
@@ -128,7 +128,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 4. permission authorizer 使用 Casbin 或同步后的 policy 判断访问权限。
 5. 通过后进入目标 controller。
 
-在线 RBAC policy 写入提交后，Redis Pub/Sub 只向各副本发送快速唤醒 hint，PostgreSQL latest policy revision 是 Casbin 静态授权规则恢复与收敛的唯一权威事实。在线写操作的 Pub/Sub 广播采用尽力而为（best-effort）语义，广播失败记录 WARN 日志并由权威数据库 revision 周期对账收敛，不制造系统级 ERROR 虚假告警。用户角色绑定写入使用独立 user-role revision，只驱动用户角色缓存失效，不推进 Casbin engine applied revision，也不触发 `role_permissions` 全量加载。`common/runtime/redispubsub` 独立监督可重建的 Pub/Sub subscription，permission Redis watcher 只消费其消息并在自己的根生命周期中执行启动立即校准和后续周期数据库 policy revision 校准；通用 subscriber 的确认、Receive 或协议失败只进入有界退避重连，不停止 watcher 的权威校准。消息处理与周期校准在 watcher 根循环中串行执行，并合并同批待处理通知，防止 Casbin projection 并发倒退或被重复消息放大全量重建。Casbin `LoadPoliciesAtLeast` 在等待超前 revision 时具备最大重试上限（默认 5 次）与指数退避，超时后明确返回错误交由定时权威校准兜底，消除长生命周期单飞重载中的无休止轮询。readiness 依据最后一次完整权威校准的 staleness 判定，当前订阅正在重连但校准仍新鲜时不制造 watcher 粘滞失败。
+在线 RBAC policy 写入提交后，Redis Pub/Sub 只向各副本发送快速唤醒 hint，PostgreSQL latest policy revision 是 Casbin 静态授权规则恢复与收敛的唯一权威事实。在线写操作的 Pub/Sub 广播采用尽力而为（best-effort）语义，广播失败记录 WARN 日志并由权威数据库 revision 周期对账收敛，不制造系统级 ERROR 虚假告警。用户角色绑定写入使用独立 user-role revision，只驱动用户角色缓存失效，不推进 Casbin engine applied revision，也不触发 `role_permissions` 全量加载。`platform/runtime/redispubsub` 独立监督可重建的 Pub/Sub subscription，permission Redis watcher 只消费其消息并在自己的根生命周期中执行启动立即校准和后续周期数据库 policy revision 校准；通用 subscriber 的确认、Receive 或协议失败只进入有界退避重连，不停止 watcher 的权威校准。消息处理与周期校准在 watcher 根循环中串行执行，并合并同批待处理通知，防止 Casbin projection 并发倒退或被重复消息放大全量重建。Casbin `LoadPoliciesAtLeast` 在等待超前 revision 时具备最大重试上限（默认 5 次）与指数退避，超时后明确返回错误交由定时权威校准兜底，消除长生命周期单飞重载中的无休止轮询。readiness 依据最后一次完整权威校准的 staleness 判定，当前订阅正在重连但校准仍新鲜时不制造 watcher 粘滞失败。
 
 ### 6.4 RBAC seed 和超级管理员 bootstrap
 
@@ -138,7 +138,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 4. `bootstrap-super-admin` 读取 `ADMIN_BOOTSTRAP_PASSWORD`，使用 `rbacbaseline.BootstrapSuperAdminUserID` 创建 `MustChangePassword` 用户并绑定内置超级管理员角色。
 5. 后续超级管理员授权通过在线用户角色绑定 API 完成，由在线流程负责 user-role revision 发布和用户角色缓存失效；只有角色状态、角色权限或权限投影变化才负责 policy revision 发布和 Casbin policy 收敛。
 
-系统内置 RBAC 角色、权限和 bootstrap 用户 ID 由 `user-service/internal/shared/rbacbaseline/ids.go` 统一定义为手写固化 UUID 字符串，semantic name 绑定稳定业务授权语义，不绑定项目展示名、HTTP path、中文文案或 Go symbol。普通运行时业务实体仍使用 `common/runtime/id.NewUUID()` 生成 UUID v7；已有项目重命名不得默认修改、重算或复用系统内置 ID。
+系统内置 RBAC 角色、权限和 bootstrap 用户 ID 由 `user-service/internal/shared/rbacbaseline/ids.go` 统一定义为手写固化 UUID 字符串，semantic name 绑定稳定业务授权语义，不绑定项目展示名、HTTP path、中文文案或 Go symbol。普通运行时业务实体仍使用 `platform/runtime/id.NewUUID()` 生成 UUID v7；已有项目重命名不得默认修改、重算或复用系统内置 ID。
 
 ### 6.5 数据迁移
 
@@ -151,13 +151,13 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 
 ## 7. 部署和观测
 
-共享核心配置只含 `app/runtime/server/log/observability`。Redis/PostgreSQL 类型由 `common/runtime/resources` 提供，user-service 在 `resources.redis.cache_redis` 与 `resources.postgres.primary_db` 声明实际资源；Redis 通过 `mode` 选择 `cluster` 或 `standalone`，集群使用 `addrs`，非集群使用 `addr`，两种 mode 均固定使用 Redis 0 号库且不暴露 `db` 配置。feature cache 由 `auth.token_version_cache` 和 `rbac.user_role_cache` 各自拥有启停与 TTL；容量和回源超时由 user-service 代码常量提供，不进入配置文件。日志输出到 stdout/stderr，tracing 启用后固定使用 OTLP，进程时区由已校验的 `runtime.timezone` 配置控制，不读取平台 `TZ`。
+共享核心配置只含 `app/runtime/server/log/observability`。Redis/PostgreSQL 类型由 `platform/runtime/resources` 提供，user-service 在 `resources.redis.cache_redis` 与 `resources.postgres.primary_db` 声明实际资源；Redis 通过 `mode` 选择 `cluster` 或 `standalone`，集群使用 `addrs`，非集群使用 `addr`，两种 mode 均固定使用 Redis 0 号库且不暴露 `db` 配置。feature cache 由 `auth.token_version_cache` 和 `rbac.user_role_cache` 各自拥有启停与 TTL；容量和回源超时由 user-service 代码常量提供，不进入配置文件。日志输出到 stdout/stderr，tracing 启用后固定使用 OTLP，进程时区由已校验的 `runtime.timezone` 配置控制，不读取平台 `TZ`。
 
 - Dockerfile：`deployments/docker/user-service.Dockerfile` 使用 BuildKit manifest-first 依赖层、只读 Go module 解析、静态编译和固定 digest 的 `gcr.io/distroless/static-debian12:nonroot` 运行时；运行镜像身份为 UID/GID `65532`，不包含 shell、包管理器、下载工具或 Atlas。
 - Compose：`deployments/compose/docker-compose.yml` 继承 Distroless `nonroot` 身份，user-service healthcheck 使用 exec-form 调用原生 `healthcheck` CLI。
 - 本地 Nacos：`deployments/nacos/` 是 Git 权威来源；两个 Compose 初始化任务分别将 `local-host/` 与 `local-docker/` 的完整三文档发布到 `loca-host` 与 `loca-docker`。
 - Helm：`deployments/helm/aegiscore-user-service/` 是唯一 Kubernetes 生产清单来源，渲染 UID/GID/fsGroup `65532`、只读根文件系统、`/tmp` emptyDir、kubelet HTTP probes 和 RBAC seed Job，并要求生产发布显式传入不可变 `image.ref`。不要再维护手写原生 Kubernetes YAML。
-- CI：主 `ci.yml` 唯一触发仅支持 `workflow_call` 的质量 workflow，使同一 commit 的 lint 与普通单测各运行一次；独立 `container-test` job 通过根 `make test-containers` 显式运行 common 与 user-service 的真实 PostgreSQL/Redis 测试；镜像安全 job 复用同一 BuildKit image ID 执行内容断言、Trivy HIGH/CRITICAL 门禁和 SBOM 生成。
+- CI：主 `ci.yml` 唯一触发仅支持 `workflow_call` 的质量 workflow，使同一 commit 的 lint 与普通单测各运行一次；独立 `container-test` job 通过根 `make test-containers` 显式运行 platform 与 user-service 的真实 PostgreSQL/Redis 测试；镜像安全 job 复用同一 BuildKit image ID 执行内容断言、Trivy HIGH/CRITICAL 门禁和 SBOM 生成。
 - Prometheus alerts：`deployments/observability/prometheus/user-service-alerts.yaml`。
 - Grafana dashboard：`deployments/observability/grafana/user-service-overview.json`。
 - Compose dashboard 由 `deployments/compose/scripts/generate-grafana-dashboard.sh` 从通用观测 dashboard 生成。

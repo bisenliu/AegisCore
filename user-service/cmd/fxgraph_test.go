@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
-	runtimefxgraph "github.com/aegiscore/common/runtime/fxgraph"
-	"github.com/aegiscore/common/runtime/localcache"
-	commonlogger "github.com/aegiscore/common/runtime/logger"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	runtimefxgraph "github.com/aegiscore/platform/runtime/fxgraph"
+	"github.com/aegiscore/platform/runtime/localcache"
+	platformlogger "github.com/aegiscore/platform/runtime/logger"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
+	platformtracing "github.com/aegiscore/platform/runtime/observability/tracing"
 
 	"github.com/aegiscore/user-service/internal/bootstrap"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
@@ -104,7 +104,7 @@ func TestFxGraphRenderDOTFailsWithoutServiceConfig(t *testing.T) {
 			serviceconfig.NewEntSettings,
 			serviceconfig.NewResourceSettings,
 			// Fx 分类：基础运行时 - 与正式 AppOptions 相同的日志 provider。
-			commonlogger.NewLogger,
+			platformlogger.NewLogger,
 		),
 		// Fx 分类：开发工具 - 复用正式 composition root 校验缺失输入会失败。
 		bootstrap.AppModule,
@@ -143,11 +143,11 @@ func fxGraphSideEffectGuards(t *testing.T) []fx.Option {
 		t.Fatalf("fxgraph constructed runtime resource: %s", name)
 	}
 	return []fx.Option{
-		fx.Decorate(func(provider *commonmetrics.Provider) *commonmetrics.Provider {
+		fx.Decorate(func(provider *platformmetrics.Provider) *platformmetrics.Provider {
 			fail("metrics provider")
 			return provider
 		}),
-		fx.Decorate(func(provider *commontracing.Provider) *commontracing.Provider {
+		fx.Decorate(func(provider *platformtracing.Provider) *platformtracing.Provider {
 			fail("tracing provider")
 			return provider
 		}),

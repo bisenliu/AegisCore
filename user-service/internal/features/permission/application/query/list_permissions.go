@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/platform/runtime/logger"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	"github.com/aegiscore/user-service/internal/features/permission/application/validators"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"

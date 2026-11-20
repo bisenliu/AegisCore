@@ -4,14 +4,14 @@ import (
 	"errors"
 	"uuid"
 
-	commonauth "github.com/aegiscore/common/security/auth"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
 // ValidateTokenVersionMatch 确认 token 或 session version 仍为当前版本。
 func ValidateTokenVersionMatch(currentVersion int64, tokenVersion int64) error {
 	if currentVersion != tokenVersion {
-		return errors.Join(authdomain.ErrTokenInvalid, commonauth.ErrTokenVersionMismatch)
+		return errors.Join(authdomain.ErrTokenInvalid, platformauth.ErrTokenVersionMismatch)
 	}
 	return nil
 }

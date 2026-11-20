@@ -9,9 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	commonmw "github.com/aegiscore/common/http/middleware"
-	commonauth "github.com/aegiscore/common/security/auth"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	platformmw "github.com/aegiscore/platform/http/middleware"
+	platformauth "github.com/aegiscore/platform/security/auth"
 )
 
 func TestAuthEntrypointsRejectOversizedRequestBodies(t *testing.T) {
@@ -42,7 +42,7 @@ func TestAuthEntrypointsRejectOversizedRequestBodies(t *testing.T) {
 			t.Run(endpoint.name+"/"+load.name, func(t *testing.T) {
 				gin.SetMode(gin.TestMode)
 				ctl, _ := newTestAuthController(t)
-				limit, err := commonmw.RequestBodyLimit(maxBytes)
+				limit, err := platformmw.RequestBodyLimit(maxBytes)
 				require.NoError(t, err)
 				engine := gin.New()
 				engine.Use(limit)
@@ -51,7 +51,7 @@ func TestAuthEntrypointsRejectOversizedRequestBodies(t *testing.T) {
 				request := httptest.NewRequest(http.MethodPost, endpoint.path, strings.NewReader(load.body(endpoint.validBody)))
 				request.Header.Set("Content-Type", "application/json")
 				if endpoint.authorize {
-					request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+"password-token")
+					request.Header.Set(platformauth.AuthorizationHeader, platformauth.TokenPrefix+"password-token")
 				}
 				if load.chunked {
 					request.ContentLength = -1

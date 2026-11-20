@@ -8,9 +8,9 @@ import (
 
 	rediscache "github.com/redis/go-redis/v9"
 
-	runtimeconfig "github.com/aegiscore/common/runtime/config"
-	runtimeid "github.com/aegiscore/common/runtime/id"
-	"github.com/aegiscore/common/runtime/workerpool"
+	runtimeconfig "github.com/aegiscore/platform/runtime/config"
+	runtimeid "github.com/aegiscore/platform/runtime/id"
+	"github.com/aegiscore/platform/runtime/workerpool"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 )
 

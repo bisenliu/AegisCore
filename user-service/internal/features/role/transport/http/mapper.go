@@ -1,7 +1,7 @@
 package rolehttp
 
 import (
-	"github.com/aegiscore/common/contract/pagination"
+	"github.com/aegiscore/platform/contract/pagination"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	rolecommand "github.com/aegiscore/user-service/internal/features/role/application/command"
 	rolequery "github.com/aegiscore/user-service/internal/features/role/application/query"

@@ -9,8 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/aegiscore/common/runtime/config"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	"github.com/aegiscore/platform/runtime/config"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 )
 
 var (
@@ -21,7 +21,7 @@ var (
 // MetricsRouteParams 包含挂载 Prometheus metrics endpoint 所需的服务级依赖。
 type MetricsRouteParams struct {
 	Config   config.MetricsConfig
-	Provider *commonmetrics.Provider
+	Provider *platformmetrics.Provider
 }
 
 // registerMetricsRoute 开放用于监控系统采集数据的抓取接口。

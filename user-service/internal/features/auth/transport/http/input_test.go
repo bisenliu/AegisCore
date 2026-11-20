@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	commonauth "github.com/aegiscore/common/security/auth"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	"github.com/aegiscore/user-service/internal/messages"
 )
 
@@ -25,19 +25,19 @@ func TestPrepareLoginCommand(t *testing.T) {
 }
 
 func TestPrepareTokenCommands(t *testing.T) {
-	refresh, err := prepareRefreshTokenCommand(RefreshTokenRequest{RefreshToken: " " + commonauth.TokenPrefix + "refresh-token "})
+	refresh, err := prepareRefreshTokenCommand(RefreshTokenRequest{RefreshToken: " " + platformauth.TokenPrefix + "refresh-token "})
 	require.NoError(t, err,
 		"prepareRefreshTokenCommand: %v", err)
 	require.Equal(t, "refresh-token", refresh.RefreshToken,
 		"refresh = %#v", refresh)
 
-	forceChange, err := prepareForceChangePasswordCommand(ForceChangePasswordRequest{Token: " " + commonauth.TokenPrefix + "password-token ", NewPassword: " new-secret-123 "})
+	forceChange, err := prepareForceChangePasswordCommand(ForceChangePasswordRequest{Token: " " + platformauth.TokenPrefix + "password-token ", NewPassword: " new-secret-123 "})
 	require.NoError(t, err,
 		"prepareForceChangePasswordCommand: %v", err)
 	require.False(t, forceChange.Token != "password-token" || forceChange.NewPassword != "new-secret-123",
 		"forceChange = %#v", forceChange)
 
-	_, err = prepareRefreshTokenCommand(RefreshTokenRequest{RefreshToken: " " + commonauth.TokenPrefix})
+	_, err = prepareRefreshTokenCommand(RefreshTokenRequest{RefreshToken: " " + platformauth.TokenPrefix})
 	appErr := contracterrors.FromError(err)
 	require.False(t, appErr.Code != contracterrors.CodeTokenInvalid || appErr.Message != messages.MissingSession,
 		"err = %#v", appErr)

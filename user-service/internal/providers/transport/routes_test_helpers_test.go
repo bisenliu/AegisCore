@@ -18,17 +18,17 @@ import (
 	"github.com/stretchr/testify/require"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	"github.com/aegiscore/common/contract/response"
-	"github.com/aegiscore/common/runtime/config"
-	runtimeid "github.com/aegiscore/common/runtime/id"
-	"github.com/aegiscore/common/runtime/localcache"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
-	commonresources "github.com/aegiscore/common/runtime/resources"
-	"github.com/aegiscore/common/runtime/workerpool"
-	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/validation"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	"github.com/aegiscore/platform/contract/response"
+	"github.com/aegiscore/platform/runtime/config"
+	runtimeid "github.com/aegiscore/platform/runtime/id"
+	"github.com/aegiscore/platform/runtime/localcache"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
+	platformtracing "github.com/aegiscore/platform/runtime/observability/tracing"
+	platformresources "github.com/aegiscore/platform/runtime/resources"
+	"github.com/aegiscore/platform/runtime/workerpool"
+	platformauth "github.com/aegiscore/platform/security/auth"
+	"github.com/aegiscore/platform/validation"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
@@ -42,14 +42,14 @@ import (
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
-func newRouteTestTracingProvider(t *testing.T, cfg *config.Config) *commontracing.Provider {
+func newRouteTestTracingProvider(t *testing.T, cfg *config.Config) *platformtracing.Provider {
 	t.Helper()
 	return newGinTestTracingProvider(t, cfg)
 }
 
-func newRouteTestMetricsProvider(t *testing.T, cfg *config.Config) *commonmetrics.Provider {
+func newRouteTestMetricsProvider(t *testing.T, cfg *config.Config) *platformmetrics.Provider {
 	t.Helper()
-	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+	provider, err := platformmetrics.NewProvider(platformmetrics.Options{
 		Config:      cfg.Observability.Metrics,
 		ServiceName: cfg.App.Name,
 		Environment: cfg.App.Environment,
@@ -58,7 +58,7 @@ func newRouteTestMetricsProvider(t *testing.T, cfg *config.Config) *commonmetric
 	return provider
 }
 
-func registerRouteTestRuntimeMetrics(t *testing.T, provider *commonmetrics.Provider) {
+func registerRouteTestRuntimeMetrics(t *testing.T, provider *platformmetrics.Provider) {
 	t.Helper()
 	db, err := sql.Open("sqlite3", "file:route_runtime_metrics?mode=memory&cache=shared")
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func registerRouteTestRuntimeMetrics(t *testing.T, provider *commonmetrics.Provi
 	t.Cleanup(func() { _ = client.Close() })
 
 	resourceSettings := serviceconfig.ResourceSettings{
-		Redis: commonresources.RedisConfigs{
+		Redis: platformresources.RedisConfigs{
 			resources.NameCacheRedis: {Timeout: time.Second},
 		},
 	}
@@ -187,17 +187,17 @@ func (a *routeAuthorizer) reset() {
 
 func (s *routeTokenVersionValidator) ValidateTokenVersion(_ context.Context, _ string, tokenVersion int64) error {
 	if tokenVersion != s.version {
-		return &commonauth.TokenVersionMismatchError{Current: s.version, Token: tokenVersion}
+		return &platformauth.TokenVersionMismatchError{Current: s.version, Token: tokenVersion}
 	}
 	return nil
 }
 
 func (s *routeAuthAuthUseCases) Login(context.Context, authcommand.LoginCommand) (*authcommand.LoginResult, error) {
-	return &authcommand.LoginResult{Tokens: &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}}, nil
+	return &authcommand.LoginResult{Tokens: &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: platformauth.TokenTypeBearer, ExpiresIn: 3600}}, nil
 }
 
 func (s *routeAuthAuthUseCases) Refresh(context.Context, authcommand.RefreshTokenCommand) (*authtokens.TokenResult, error) {
-	return &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
+	return &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: platformauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
 func (s *routeAuthAuthUseCases) ForceChangePassword(context.Context, authcommand.ForceChangePasswordCommand) (*authcommand.ForceChangePasswordResult, error) {

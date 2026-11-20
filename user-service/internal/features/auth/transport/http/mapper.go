@@ -1,8 +1,8 @@
 package authhttp
 
 import (
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	contractresponse "github.com/aegiscore/common/contract/response"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	contractresponse "github.com/aegiscore/platform/contract/response"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	"github.com/aegiscore/user-service/internal/messages"

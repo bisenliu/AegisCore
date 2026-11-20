@@ -4,7 +4,7 @@ import (
 	"context"
 	"uuid"
 
-	"github.com/aegiscore/common/contract/pagination"
+	"github.com/aegiscore/platform/contract/pagination"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 )

@@ -9,7 +9,7 @@ import (
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 
-	commonauth "github.com/aegiscore/common/security/auth"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
@@ -36,7 +36,7 @@ func TestIssuerIssuesPasswordChangeToken(t *testing.T) {
 	tokens, err := issuer.IssuePasswordChangeToken(context.Background(), issuerTestUserID, 2, "pc-123")
 	require.NoError(t, err,
 		"IssuePasswordChangeToken: %v", err)
-	require.False(t, tokens.AccessToken == "" || tokens.RefreshToken != "" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn != int64((4*time.Minute).Seconds()),
+	require.False(t, tokens.AccessToken == "" || tokens.RefreshToken != "" || tokens.TokenType != platformauth.TokenTypeBearer || tokens.ExpiresIn != int64((4*time.Minute).Seconds()),
 		"tokens = %#v", tokens)
 
 	claims, parsedUserID, err := issuer.ParsePasswordChangeToken(context.Background(), tokens.AccessToken)
@@ -106,8 +106,8 @@ func testIssuerConfig(jwt serviceconfig.JWTConfig) serviceconfig.AuthSettings {
 	return serviceconfig.AuthSettings{JWT: jwt}
 }
 
-func testJWTVerifier(settings serviceconfig.AuthSettings) *commonauth.JWTService {
-	return commonauth.NewJWTService(commonauth.JWTConfig{Secret: settings.JWT.Secret, Issuer: settings.JWT.Issuer, Audience: settings.JWT.Audience})
+func testJWTVerifier(settings serviceconfig.AuthSettings) *platformauth.JWTService {
+	return platformauth.NewJWTService(platformauth.JWTConfig{Secret: settings.JWT.Secret, Issuer: settings.JWT.Issuer, Audience: settings.JWT.Audience})
 }
 
 func signIssuerTestClaims(t *testing.T, secret string, claims Claims) string {

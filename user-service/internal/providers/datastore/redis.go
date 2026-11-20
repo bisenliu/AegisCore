@@ -8,13 +8,13 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/datastore"
-	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
-	commonresources "github.com/aegiscore/common/runtime/resources"
+	"github.com/aegiscore/platform/runtime/datastore"
+	platformtracing "github.com/aegiscore/platform/runtime/observability/tracing"
+	platformresources "github.com/aegiscore/platform/runtime/resources"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
-type redisClientFactory func(fx.Lifecycle, *zap.Logger, string, commonresources.RedisConfig, ...datastore.RedisClientOption) (redis.UniversalClient, error)
+type redisClientFactory func(fx.Lifecycle, *zap.Logger, string, platformresources.RedisConfig, ...datastore.RedisClientOption) (redis.UniversalClient, error)
 
 // RedisParams 包含供应单个 Redis 客户端所需的 Fx 输入。
 type RedisParams struct {
@@ -23,7 +23,7 @@ type RedisParams struct {
 	Lifecycle fx.Lifecycle
 	Settings  serviceconfig.ResourceSettings
 	Log       *zap.Logger
-	Trace     *commontracing.Provider
+	Trace     *platformtracing.Provider
 }
 
 // ProvideRedis 返回按调用方资源名选择配置并创建单个 Redis 客户端的构造器。

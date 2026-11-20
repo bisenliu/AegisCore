@@ -17,9 +17,9 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/aegiscore/common/runtime/config"
-	runtimeid "github.com/aegiscore/common/runtime/id"
-	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/platform/runtime/config"
+	runtimeid "github.com/aegiscore/platform/runtime/id"
+	"github.com/aegiscore/platform/runtime/logger"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/enttest"

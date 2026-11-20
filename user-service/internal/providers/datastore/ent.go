@@ -10,9 +10,9 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/logger"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	"github.com/aegiscore/platform/runtime/logger"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
+	platformtracing "github.com/aegiscore/platform/runtime/observability/tracing"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
@@ -30,7 +30,7 @@ type nonClosingEntDriver struct {
 // ProvideEntPlugins 按服务配置构造一次 Ent 插件。
 //
 // metrics collector 在这里注册，后续每个具名 Ent client 只复用该集合，避免按连接重复注册。
-func ProvideEntPlugins(settings serviceconfig.EntSettings, log *zap.Logger, metrics *commonmetrics.Provider, tracing *commontracing.Provider) (EntPlugins, error) {
+func ProvideEntPlugins(settings serviceconfig.EntSettings, log *zap.Logger, metrics *platformmetrics.Provider, tracing *platformtracing.Provider) (EntPlugins, error) {
 	if metrics == nil {
 		return EntPlugins{}, fmt.Errorf("ent metrics provider is required")
 	}

@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/datastore"
+	"github.com/aegiscore/platform/runtime/datastore"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	"github.com/aegiscore/user-service/internal/persistence/ent"

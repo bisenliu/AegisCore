@@ -3,7 +3,7 @@ module github.com/aegiscore/tools/openapi-convert
 go 1.27.4
 
 require (
-	github.com/aegiscore/common v0.0.0
+	github.com/aegiscore/platform v0.0.0
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -22,4 +22,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/aegiscore/common => ../../common
+replace github.com/aegiscore/platform => ../../platform

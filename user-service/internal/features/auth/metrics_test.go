@@ -8,13 +8,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/config"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	"github.com/aegiscore/platform/runtime/config"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 )
 
 func TestAuthPrometheusMetrics(t *testing.T) {
-	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+	provider, err := platformmetrics.NewProvider(platformmetrics.Options{
 		Config:      config.MetricsConfig{Enabled: true},
 		ServiceName: "aegiscore-user-service-test",
 		Environment: "test",
@@ -53,7 +53,7 @@ func TestAuthPrometheusMetrics(t *testing.T) {
 }
 
 func TestAuthMetricsDisabledUsesNoop(t *testing.T) {
-	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+	provider, err := platformmetrics.NewProvider(platformmetrics.Options{
 		Config:      config.MetricsConfig{Enabled: false},
 		ServiceName: "aegiscore-user-service-test",
 		Environment: "test",
@@ -73,7 +73,7 @@ func TestAuthMetricsDisabledUsesNoop(t *testing.T) {
 
 }
 
-func gatherAuthMetricText(t *testing.T, provider *commonmetrics.Provider) string {
+func gatherAuthMetricText(t *testing.T, provider *platformmetrics.Provider) string {
 	t.Helper()
 	families, err := provider.Gatherer().Gather()
 	require.NoError(t, err,

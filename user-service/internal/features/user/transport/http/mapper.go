@@ -1,7 +1,7 @@
 package userhttp
 
 import (
-	"github.com/aegiscore/common/contract/pagination"
+	"github.com/aegiscore/platform/contract/pagination"
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 )

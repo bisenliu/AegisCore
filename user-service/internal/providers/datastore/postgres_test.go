@@ -20,11 +20,11 @@ import (
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/datastore"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
-	commonresources "github.com/aegiscore/common/runtime/resources"
+	"github.com/aegiscore/platform/runtime/config"
+	"github.com/aegiscore/platform/runtime/datastore"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
+	platformtracing "github.com/aegiscore/platform/runtime/observability/tracing"
+	platformresources "github.com/aegiscore/platform/runtime/resources"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 	"github.com/aegiscore/user-service/internal/resources"
@@ -44,10 +44,10 @@ func TestProvidePostgresProvidesNamedDatabase(t *testing.T) {
 }
 
 func TestProvidePostgresProvidesCustomResourceName(t *testing.T) {
-	cfg := serviceconfig.ResourceSettings{Postgres: commonresources.PostgresConfigs{
+	cfg := serviceconfig.ResourceSettings{Postgres: platformresources.PostgresConfigs{
 		"analytics_db": {
 			Host: "127.0.0.1", Port: 15432, Username: "aegiscore", Password: "secret", DBName: "analytics", SSLMode: "disable",
-			Pool: commonresources.PostgresPoolConfig{MaxOpenConns: 4, MaxIdleConns: 1, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second},
+			Pool: platformresources.PostgresPoolConfig{MaxOpenConns: 4, MaxIdleConns: 1, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second},
 		},
 	}}
 	got, err := ProvidePostgres("analytics_db")(PostgresParams{Lifecycle: fxtest.NewLifecycle(t), Settings: cfg, Log: zap.NewNop(), Trace: newProviderTestDisabledTracing(t)})
@@ -166,14 +166,14 @@ func TestProvideRedisProvidesNamedClient(t *testing.T) {
 	traceCfg := &config.Config{App: config.AppConfig{Name: "provider-test", Environment: "test"}, Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1}}}
 	traceProvider, traceCollector := newGinTestTracingProviderWithCollector(t, traceCfg)
 	cfg := providerTestConfig("")
-	cfg.Redis = commonresources.RedisConfigs{
+	cfg.Redis = platformresources.RedisConfigs{
 		resources.NameCacheRedis: {
-			Mode:    commonresources.RedisModeCluster,
+			Mode:    platformresources.RedisModeCluster,
 			Addrs:   []string{redisServer.addr},
 			Timeout: time.Second,
 		},
 		"queue_redis": {
-			Mode:    commonresources.RedisModeCluster,
+			Mode:    platformresources.RedisModeCluster,
 			Addrs:   []string{"127.0.0.1:1"},
 			Timeout: time.Second,
 		},
@@ -220,8 +220,8 @@ func TestProvideRedisDoesNotProvideUndeclaredClient(t *testing.T) {
 
 func TestProvideRedisProvidesCustomResourceName(t *testing.T) {
 	redisServer := newProviderTestRedisServer(t)
-	cfg := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
-		"queue_redis": {Mode: commonresources.RedisModeCluster, Addrs: []string{redisServer.addr}, Timeout: time.Second},
+	cfg := serviceconfig.ResourceSettings{Redis: platformresources.RedisConfigs{
+		"queue_redis": {Mode: platformresources.RedisModeCluster, Addrs: []string{redisServer.addr}, Timeout: time.Second},
 	}}
 
 	client, err := ProvideRedis("queue_redis")(RedisParams{
@@ -269,7 +269,7 @@ func TestProvideRedisAcceptsUnstartedTracingProvider(t *testing.T) {
 		Lifecycle: fxtest.NewLifecycle(t),
 		Settings:  providerTestConfig(""),
 		Log:       zap.NewNop(),
-		Trace:     &commontracing.Provider{},
+		Trace:     &platformtracing.Provider{},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, client)
@@ -283,7 +283,7 @@ func TestProvideRedisUsesFxTracingProviderDuringConstruction(t *testing.T) {
 		App:           config.AppConfig{Name: "provider-test", Environment: "test"},
 		Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1}},
 	}
-	cfg.Redis[resources.NameCacheRedis] = commonresources.RedisConfig{Mode: commonresources.RedisModeCluster, Addrs: []string{redisServer.addr}, Timeout: time.Second}
+	cfg.Redis[resources.NameCacheRedis] = platformresources.RedisConfig{Mode: platformresources.RedisModeCluster, Addrs: []string{redisServer.addr}, Timeout: time.Second}
 
 	type clients struct {
 		fx.In
@@ -293,7 +293,7 @@ func TestProvideRedisUsesFxTracingProviderDuringConstruction(t *testing.T) {
 	var got clients
 	app := fxtest.New(t,
 		fx.Supply(cfg, runtimeCfg, zap.NewNop()),
-		fx.Provide(commontracing.NewTracingProvider),
+		fx.Provide(platformtracing.NewTracingProvider),
 		fx.Provide(fx.Annotate(ProvideRedis(resources.NameCacheRedis), fx.ResultTags(`name:"cache_redis"`))),
 		fx.Populate(&got),
 	)
@@ -312,7 +312,7 @@ func TestProvideRedisWrapsConstructorError(t *testing.T) {
 		Settings:  providerTestConfig(""),
 		Log:       zap.NewNop(),
 		Trace:     traceProvider,
-	}, func(fx.Lifecycle, *zap.Logger, string, commonresources.RedisConfig, ...datastore.RedisClientOption) (redis.UniversalClient, error) {
+	}, func(fx.Lifecycle, *zap.Logger, string, platformresources.RedisConfig, ...datastore.RedisClientOption) (redis.UniversalClient, error) {
 		return nil, constructorErr
 	})
 	require.Nil(t, client)
@@ -324,8 +324,8 @@ func TestProvideRedisFailsStartWhenResourceUnavailable(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 	traceProvider := newProviderTestTracing(t)
-	cfg := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
-		resources.NameCacheRedis: {Mode: commonresources.RedisModeCluster, Addrs: []string{"127.0.0.1:1"}, Timeout: 10 * time.Millisecond},
+	cfg := serviceconfig.ResourceSettings{Redis: platformresources.RedisConfigs{
+		resources.NameCacheRedis: {Mode: platformresources.RedisModeCluster, Addrs: []string{"127.0.0.1:1"}, Timeout: 10 * time.Millisecond},
 	}}
 
 	client, err := ProvideRedis(resources.NameCacheRedis)(RedisParams{Lifecycle: lc, Settings: cfg, Log: log, Trace: traceProvider})
@@ -337,7 +337,7 @@ func TestProvideRedisFailsStartWhenResourceUnavailable(t *testing.T) {
 	require.ErrorIs(t, client.Ping(ctx).Err(), redis.ErrClosed)
 }
 
-func newProviderTestTracing(t *testing.T) *commontracing.Provider {
+func newProviderTestTracing(t *testing.T) *platformtracing.Provider {
 	t.Helper()
 	cfg := &config.Config{
 		App: config.AppConfig{Name: "provider-test", Environment: "test"},
@@ -351,9 +351,9 @@ func newProviderTestTracing(t *testing.T) *commontracing.Provider {
 	return newGinTestTracingProvider(t, cfg)
 }
 
-func newProviderTestDisabledTracing(t *testing.T) *commontracing.Provider {
+func newProviderTestDisabledTracing(t *testing.T) *platformtracing.Provider {
 	t.Helper()
-	provider, err := commontracing.NewProvider(context.Background(), commontracing.Options{
+	provider, err := platformtracing.NewProvider(context.Background(), platformtracing.Options{
 		Config:      config.TracingConfig{Enabled: false, SampleRatio: 1},
 		ServiceName: "provider-test",
 		Environment: "test",
@@ -363,9 +363,9 @@ func newProviderTestDisabledTracing(t *testing.T) *commontracing.Provider {
 	return provider
 }
 
-func newProviderTestMetrics(t *testing.T, enabled bool) *commonmetrics.Provider {
+func newProviderTestMetrics(t *testing.T, enabled bool) *platformmetrics.Provider {
 	t.Helper()
-	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+	provider, err := platformmetrics.NewProvider(platformmetrics.Options{
 		Config:      config.MetricsConfig{Enabled: enabled},
 		ServiceName: "provider-test",
 		Environment: "test",
@@ -397,21 +397,21 @@ func providerTestSpanNames(spans []*tracepb.Span) []string {
 
 func providerTestConfig(_ string) serviceconfig.ResourceSettings {
 	return serviceconfig.ResourceSettings{
-		Redis: commonresources.RedisConfigs{
+		Redis: platformresources.RedisConfigs{
 			resources.NameCacheRedis: {
-				Mode:    commonresources.RedisModeCluster,
+				Mode:    platformresources.RedisModeCluster,
 				Addrs:   []string{"127.0.0.1:6379"},
 				Timeout: time.Second,
 			},
 		},
-		Postgres: commonresources.PostgresConfigs{
+		Postgres: platformresources.PostgresConfigs{
 			resources.NamePrimaryDB: {
 				Host: "127.0.0.1", Port: 15432, Username: "aegiscore", Password: "secret", DBName: "aegiscore_user", SSLMode: "disable",
-				Pool: commonresources.PostgresPoolConfig{MaxOpenConns: 7, MaxIdleConns: 3, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second},
+				Pool: platformresources.PostgresPoolConfig{MaxOpenConns: 7, MaxIdleConns: 3, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second},
 			},
 			"pay_db": {
 				Host: "127.0.0.1", Port: 15432, Username: "aegiscore", Password: "secret", DBName: "aegiscore_pay", SSLMode: "disable",
-				Pool: commonresources.PostgresPoolConfig{MaxOpenConns: 99, MaxIdleConns: 3, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second},
+				Pool: platformresources.PostgresPoolConfig{MaxOpenConns: 99, MaxIdleConns: 3, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second},
 			},
 		},
 	}

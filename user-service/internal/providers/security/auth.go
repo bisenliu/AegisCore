@@ -3,7 +3,7 @@ package security
 import (
 	"fmt"
 
-	"github.com/aegiscore/common/security/auth"
+	"github.com/aegiscore/platform/security/auth"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 

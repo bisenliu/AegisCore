@@ -16,13 +16,13 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	commonconfig "github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/localcache"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	"github.com/aegiscore/common/runtime/workerpool"
-	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/security/password"
-	commonvalidation "github.com/aegiscore/common/validation"
+	platformconfig "github.com/aegiscore/platform/runtime/config"
+	"github.com/aegiscore/platform/runtime/localcache"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
+	"github.com/aegiscore/platform/runtime/workerpool"
+	platformauth "github.com/aegiscore/platform/security/auth"
+	"github.com/aegiscore/platform/security/password"
+	platformvalidation "github.com/aegiscore/platform/validation"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
@@ -226,7 +226,7 @@ func TestSessionPurgePoolHolderRejectsBeforeStartAndStopsIdempotently(t *testing
 }
 
 type authModuleOutputs struct {
-	provider               *commonmetrics.Provider
+	provider               *platformmetrics.Provider
 	login                  authcommand.LoginUseCase
 	refresh                authcommand.RefreshTokenUseCase
 	forceChange            authcommand.ForceChangePasswordUseCase
@@ -237,7 +237,7 @@ type authModuleOutputs struct {
 	metrics                authapplication.Metrics
 	refreshSessions        authapplication.RefreshSessionStore
 	passwordChangeSessions authapplication.PasswordChangeSessionStore
-	validator              commonauth.TokenVersionValidator
+	validator              platformauth.TokenVersionValidator
 	invalidator            authvalidators.TokenVersionLocalInvalidator
 	controller             *authhttp.AuthController
 	graph                  fx.DotGraph
@@ -270,7 +270,7 @@ func newAuthModuleTestApp(t *testing.T, metricsEnabled bool, refreshRotation boo
 	return outputs
 }
 
-func newAuthModuleBaseOptions(t *testing.T, refreshRotation bool, provider *commonmetrics.Provider) []fx.Option {
+func newAuthModuleBaseOptions(t *testing.T, refreshRotation bool, provider *platformmetrics.Provider) []fx.Option {
 	t.Helper()
 	redisServer := miniredis.RunT(t)
 	redisClient := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
@@ -279,7 +279,7 @@ func newAuthModuleBaseOptions(t *testing.T, refreshRotation bool, provider *comm
 	return append(options, fx.Supply(fx.Annotate(redisClient, fx.As(new(rediscache.UniversalClient)), fx.ResultTags(`name:"cache_redis"`))))
 }
 
-func newAuthModuleBaseOptionsWithoutRedis(t *testing.T, refreshRotation bool, provider *commonmetrics.Provider) []fx.Option {
+func newAuthModuleBaseOptionsWithoutRedis(t *testing.T, refreshRotation bool, provider *platformmetrics.Provider) []fx.Option {
 	t.Helper()
 	settings := serviceconfig.AuthSettings{
 		AppName: "aegiscore-user-service-module-test",
@@ -296,10 +296,10 @@ func newAuthModuleBaseOptionsWithoutRedis(t *testing.T, refreshRotation bool, pr
 		RefreshTokenRotation:     refreshRotation,
 		MaxActiveSessionsPerUser: 5,
 	}
-	jwtService := commonauth.NewJWTService(commonauth.JWTConfig{Secret: settings.JWT.Secret, Issuer: settings.JWT.Issuer, Audience: settings.JWT.Audience})
+	jwtService := platformauth.NewJWTService(platformauth.JWTConfig{Secret: settings.JWT.Secret, Issuer: settings.JWT.Issuer, Audience: settings.JWT.Audience})
 	passwordService, err := password.NewService()
 	require.NoError(t, err)
-	validator, err := commonvalidation.NewDefault()
+	validator, err := platformvalidation.NewDefault()
 	require.NoError(t, err)
 	credentialStore := authModuleCredentialStore{}
 
@@ -324,10 +324,10 @@ func newAuthModuleBaseOptionsWithoutRedis(t *testing.T, refreshRotation bool, pr
 	return options
 }
 
-func newAuthModuleMetricsProvider(t *testing.T, enabled bool) *commonmetrics.Provider {
+func newAuthModuleMetricsProvider(t *testing.T, enabled bool) *platformmetrics.Provider {
 	t.Helper()
-	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
-		Config:      commonconfig.MetricsConfig{Enabled: enabled},
+	provider, err := platformmetrics.NewProvider(platformmetrics.Options{
+		Config:      platformconfig.MetricsConfig{Enabled: enabled},
 		ServiceName: "aegiscore-user-service-module-test",
 		Environment: "test",
 	})

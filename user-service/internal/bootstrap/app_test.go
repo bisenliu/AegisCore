@@ -11,16 +11,16 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	commonconfig "github.com/aegiscore/common/runtime/config"
+	platformconfig "github.com/aegiscore/platform/runtime/config"
 	configtestkit "github.com/aegiscore/user-service/internal/config/testkit"
 )
 
 func TestAppModuleValidatesFullRuntimeGraph(t *testing.T) {
-	var docs []commonconfig.ConfigDocument
+	var docs []platformconfig.ConfigDocument
 	for _, dataID := range []string{"base.yaml", "resources.yaml", "user-service.yaml"} {
 		content, err := os.ReadFile(filepath.Join("..", "..", "..", "deployments", "nacos", "local-docker", dataID))
 		require.NoError(t, err)
-		docs = append(docs, commonconfig.ConfigDocument{DataID: dataID, Content: content})
+		docs = append(docs, platformconfig.ConfigDocument{DataID: dataID, Content: content})
 	}
 	result, err := configtestkit.LoadFromDocuments(docs)
 	require.NoError(t, err)

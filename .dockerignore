@@ -4,8 +4,8 @@
 # deployments/docker/user-service.Dockerfile 所需的 workspace 文件
 !go.work
 !go.work.sum
-!common/
-!common/**
+!platform/
+!platform/**
 !tools/
 !tools/nacos-config-seed/
 !tools/nacos-config-seed/**

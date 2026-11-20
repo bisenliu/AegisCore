@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/security/password"
+	platformauth "github.com/aegiscore/platform/security/auth"
+	"github.com/aegiscore/platform/security/password"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
@@ -70,7 +70,7 @@ func normalCredential() *authdomain.UserCredential {
 
 func issuedTokenPair(accessToken string, refreshToken string, expiresIn int64, refreshTTL time.Duration) *authtokens.IssuedTokenPair {
 	return &authtokens.IssuedTokenPair{
-		Result:     &authtokens.TokenResult{AccessToken: accessToken, RefreshToken: refreshToken, TokenType: commonauth.TokenTypeBearer, ExpiresIn: expiresIn},
+		Result:     &authtokens.TokenResult{AccessToken: accessToken, RefreshToken: refreshToken, TokenType: platformauth.TokenTypeBearer, ExpiresIn: expiresIn},
 		RefreshTTL: refreshTTL,
 	}
 }

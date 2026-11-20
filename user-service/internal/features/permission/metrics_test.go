@@ -10,13 +10,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/config"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	"github.com/aegiscore/platform/runtime/config"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 
 func TestPermissionPrometheusMetrics(t *testing.T) {
-	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+	provider, err := platformmetrics.NewProvider(platformmetrics.Options{
 		Config:      config.MetricsConfig{Enabled: true},
 		ServiceName: "aegiscore-user-service-test",
 		Environment: "test",
@@ -70,7 +70,7 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 }
 
 func TestPermissionMetricsDisabledUsesNoop(t *testing.T) {
-	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+	provider, err := platformmetrics.NewProvider(platformmetrics.Options{
 		Config:      config.MetricsConfig{Enabled: false},
 		ServiceName: "aegiscore-user-service-test",
 		Environment: "test",
@@ -81,7 +81,7 @@ func TestPermissionMetricsDisabledUsesNoop(t *testing.T) {
 }
 
 func TestCasbinPolicyReloadMetricsRecordsStatus(t *testing.T) {
-	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+	provider, err := platformmetrics.NewProvider(platformmetrics.Options{
 		Config:      config.MetricsConfig{Enabled: true},
 		ServiceName: "aegiscore-user-service-test",
 		Environment: "test",
@@ -104,7 +104,7 @@ func TestCasbinPolicyReloadMetricsRecordsStatus(t *testing.T) {
 }
 
 func TestCasbinPolicyReloadMetricsDisabledUsesNoop(t *testing.T) {
-	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+	provider, err := platformmetrics.NewProvider(platformmetrics.Options{
 		Config:      config.MetricsConfig{Enabled: false},
 		ServiceName: "aegiscore-user-service-test",
 		Environment: "test",
@@ -124,7 +124,7 @@ func (h *metricPolicyHealth) ProjectionStatus() permissionapplication.PolicyProj
 	return h.status
 }
 
-func gatherPermissionMetricText(t *testing.T, provider *commonmetrics.Provider) string {
+func gatherPermissionMetricText(t *testing.T, provider *platformmetrics.Provider) string {
 	t.Helper()
 	families, err := provider.Gatherer().Gather()
 	require.NoError(t, err)

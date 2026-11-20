@@ -5,9 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/aegiscore/common/http/binding"
-	"github.com/aegiscore/common/http/response"
-	commonvalidation "github.com/aegiscore/common/validation"
+	"github.com/aegiscore/platform/http/binding"
+	"github.com/aegiscore/platform/http/response"
+	platformvalidation "github.com/aegiscore/platform/validation"
 	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 )
@@ -19,7 +19,7 @@ type AuthController struct {
 	forceChange   authcommand.ForceChangePasswordUseCase
 	logoutCurrent authcommand.LogoutCurrentSessionUseCase
 	logoutAll     authcommand.LogoutAllSessionsUseCase
-	validator     *commonvalidation.Validator
+	validator     *platformvalidation.Validator
 }
 
 // AuthControllerOptions 包含构造认证控制器所需的普通依赖。
@@ -29,7 +29,7 @@ type AuthControllerOptions struct {
 	ForceChange   authcommand.ForceChangePasswordUseCase
 	LogoutCurrent authcommand.LogoutCurrentSessionUseCase
 	LogoutAll     authcommand.LogoutAllSessionsUseCase
-	Validator     *commonvalidation.Validator
+	Validator     *platformvalidation.Validator
 }
 
 // NewAuthController 创建认证接口控制器，组装认证业务用例与请求校验服务。

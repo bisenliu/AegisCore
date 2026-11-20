@@ -4,8 +4,8 @@ import (
 	"strings"
 	"uuid"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	"github.com/aegiscore/common/contract/pagination"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	"github.com/aegiscore/platform/contract/pagination"
 	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	"github.com/aegiscore/user-service/internal/messages"

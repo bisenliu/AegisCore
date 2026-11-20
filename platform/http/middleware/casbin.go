@@ -1,0 +1,130 @@
+package middleware
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	platformresponse "github.com/aegiscore/platform/http/response"
+	platformcasbin "github.com/aegiscore/platform/security/casbin"
+)
+
+// casbinAuthorizationWildcardMethod 是 Casbin 授权白名单匹配任意 HTTP 请求方法的通配符。
+const casbinAuthorizationWildcardMethod = "*"
+
+// CasbinAuthorizer 定义 HTTP 中间件依赖的通用授权能力。
+type CasbinAuthorizer interface {
+	Authorize(ctx context.Context, req platformcasbin.Request) error
+}
+
+// CasbinRequestResolver 从 Gin 请求上下文解析 Casbin 授权请求。
+type CasbinRequestResolver func(c *gin.Context) (platformcasbin.Request, error)
+
+// CasbinErrorHandler 由调用方决定授权失败响应。
+type CasbinErrorHandler func(c *gin.Context, err error)
+
+// CasbinAuthorizationWhitelistRule 描述一条跳过 Casbin 授权的显式路由模板规则。
+type CasbinAuthorizationWhitelistRule struct {
+	Method       string
+	PathTemplate string
+}
+
+// CasbinAuthorizationOption 配置通用 Casbin HTTP 授权中间件。
+type CasbinAuthorizationOption func(*casbinAuthorizationConfig)
+
+type casbinAuthorizationConfig struct {
+	whitelist map[CasbinAuthorizationWhitelistRule]struct{}
+	onError   CasbinErrorHandler
+}
+
+// WithCasbinAuthorizationWhitelist 配置按 HTTP 方法和 Gin 路由模板匹配的授权白名单。
+func WithCasbinAuthorizationWhitelist(rules ...CasbinAuthorizationWhitelistRule) CasbinAuthorizationOption {
+	return func(cfg *casbinAuthorizationConfig) {
+		for _, rule := range rules {
+			if rule.PathTemplate == "" {
+				continue
+			}
+			cfg.whitelist[normalizeCasbinAuthorizationRule(rule)] = struct{}{}
+		}
+	}
+}
+
+// WithCasbinAuthorizationErrorHandler 配置授权失败响应处理函数。
+func WithCasbinAuthorizationErrorHandler(handler CasbinErrorHandler) CasbinAuthorizationOption {
+	return func(cfg *casbinAuthorizationConfig) {
+		cfg.onError = handler
+	}
+}
+
+// CasbinAuthorization 返回基于 resolver 和 authorizer 的 Gin 授权中间件。
+// 白名单匹配 Gin FullPath 路由模板，不匹配原始 URL；未命中路由时 FullPath 为空，因此不会被模板白名单跳过。
+func CasbinAuthorization(authorizer CasbinAuthorizer, resolver CasbinRequestResolver, opts ...CasbinAuthorizationOption) gin.HandlerFunc {
+	cfg := casbinAuthorizationConfig{whitelist: make(map[CasbinAuthorizationWhitelistRule]struct{})}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return func(c *gin.Context) {
+		if c.Request.Method == http.MethodOptions {
+			c.Next()
+			return
+		}
+		pathTemplate := c.FullPath()
+		if pathTemplate != "" && cfg.isWhitelisted(c.Request.Method, pathTemplate) {
+			c.Next()
+			return
+		}
+		if authorizer == nil || resolver == nil {
+			abortCasbinAuthorization(c, cfg.onError, platformcasbin.ErrNotConfigured)
+			return
+		}
+		req, err := resolver(c)
+		if err != nil {
+			abortCasbinAuthorization(c, cfg.onError, err)
+			return
+		}
+		if err := authorizer.Authorize(c.Request.Context(), req); err != nil {
+			abortCasbinAuthorization(c, cfg.onError, err)
+			return
+		}
+		c.Next()
+	}
+}
+
+// isWhitelisted 检查当前访问的接口是否属于免登录或免权限白名单（如健康检查或登录接口）。
+func (cfg casbinAuthorizationConfig) isWhitelisted(method string, pathTemplate string) bool {
+	method = strings.ToUpper(method)
+	_, exact := cfg.whitelist[CasbinAuthorizationWhitelistRule{Method: method, PathTemplate: pathTemplate}]
+	if exact {
+		return true
+	}
+	_, wildcard := cfg.whitelist[CasbinAuthorizationWhitelistRule{Method: casbinAuthorizationWildcardMethod, PathTemplate: pathTemplate}]
+	return wildcard
+}
+
+// abortCasbinAuthorization 当用户没有操作权限时立即拦截并终止处理，向用户返回统一的权限不足提示。
+func abortCasbinAuthorization(c *gin.Context, onError CasbinErrorHandler, err error) {
+	if onError != nil {
+		onError(c, err)
+		c.Abort()
+		return
+	}
+	if errors.Is(err, platformcasbin.ErrDenied) {
+		platformresponse.Forbidden(c, "permission denied")
+	} else {
+		platformresponse.Fail(c, contracterrors.InternalError(err))
+	}
+	c.Abort()
+}
+
+// normalizeCasbinAuthorizationRule 整理免权限白名单规则，清理多余空格并将请求方法统一转为大写，防止因大小写不一致导致匹配失效。
+func normalizeCasbinAuthorizationRule(rule CasbinAuthorizationWhitelistRule) CasbinAuthorizationWhitelistRule {
+	method := strings.ToUpper(rule.Method)
+	if method == "" {
+		method = casbinAuthorizationWildcardMethod
+	}
+	return CasbinAuthorizationWhitelistRule{Method: method, PathTemplate: rule.PathTemplate}
+}

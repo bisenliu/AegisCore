@@ -9,7 +9,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
-	commonvalidation "github.com/aegiscore/common/validation"
+	platformvalidation "github.com/aegiscore/platform/validation"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
@@ -20,7 +20,7 @@ import (
 )
 
 func TestRoleModuleBuildsWithCompositionAdapters(t *testing.T) {
-	validator, err := commonvalidation.NewDefault()
+	validator, err := platformvalidation.NewDefault()
 	require.NoError(t, err)
 	store := roleModuleStore{}
 	permissionStore := roleModulePermissionStore{}

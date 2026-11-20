@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"uuid"
 
-	"github.com/aegiscore/common/runtime/localcache"
+	"github.com/aegiscore/platform/runtime/localcache"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 

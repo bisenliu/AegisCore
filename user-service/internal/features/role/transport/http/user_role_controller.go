@@ -3,8 +3,8 @@ package rolehttp
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/aegiscore/common/http/binding"
-	"github.com/aegiscore/common/http/response"
+	"github.com/aegiscore/platform/http/binding"
+	"github.com/aegiscore/platform/http/response"
 )
 
 // ListUserRoles 查询指定用户当前拥有的角色列表接口。

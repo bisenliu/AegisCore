@@ -12,7 +12,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/testing/containers"
+	"github.com/aegiscore/platform/testing/containers"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"

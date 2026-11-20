@@ -8,7 +8,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 
-	"github.com/aegiscore/common/runtime/datastore"
+	"github.com/aegiscore/platform/runtime/datastore"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"

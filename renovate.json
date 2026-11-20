@@ -95,7 +95,7 @@
       ],
       "postUpgradeTasks": {
         "commands": [
-          "go list ./common/... ./user-service/... ./tools/openapi-convert/..."
+          "go list ./platform/... ./user-service/... ./tools/openapi-convert/..."
         ],
         "fileFilters": [
           "go.work.sum"

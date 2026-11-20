@@ -3,7 +3,7 @@ package security
 import (
 	"go.uber.org/fx"
 
-	"github.com/aegiscore/common/security/password"
+	"github.com/aegiscore/platform/security/password"
 )
 
 // WiringModule 注册 user-service 安全 provider。

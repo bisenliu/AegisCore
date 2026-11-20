@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	commonlogger "github.com/aegiscore/common/runtime/logger"
+	platformlogger "github.com/aegiscore/platform/runtime/logger"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	rolebootstrap "github.com/aegiscore/user-service/internal/features/role/application/bootstrap"
 	roleseed "github.com/aegiscore/user-service/internal/features/role/application/seed"
@@ -54,5 +54,5 @@ func contextWithRBACLogger(ctx context.Context, deps rbacSeedDependencies) conte
 	if deps.log == nil {
 		return ctx
 	}
-	return commonlogger.ToContext(ctx, deps.log)
+	return platformlogger.ToContext(ctx, deps.log)
 }

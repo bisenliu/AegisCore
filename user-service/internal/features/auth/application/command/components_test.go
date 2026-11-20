@@ -13,9 +13,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/localcache"
-	"github.com/aegiscore/common/runtime/logger"
-	commonauth "github.com/aegiscore/common/security/auth"
+	"github.com/aegiscore/platform/runtime/localcache"
+	"github.com/aegiscore/platform/runtime/logger"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
@@ -181,7 +181,7 @@ func TestCredentialVerifierForceChangePasswordMapsUpdateError(t *testing.T) {
 
 func TestAuthTokenIssuerParsesBearerRefreshToken(t *testing.T) {
 	settings := serviceconfig.AuthSettings{JWT: serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}}
-	jwt := commonauth.NewJWTService(commonauth.JWTConfig{Secret: settings.JWT.Secret, Issuer: settings.JWT.Issuer, Audience: settings.JWT.Audience})
+	jwt := platformauth.NewJWTService(platformauth.JWTConfig{Secret: settings.JWT.Secret, Issuer: settings.JWT.Issuer, Audience: settings.JWT.Audience})
 	issuer := authtokens.NewIssuer(jwt, settings)
 	pair, err := issuer.IssueTokenPair(context.Background(), authTestUserID, 2, "s-123")
 	require.NoError(t, err,
@@ -408,10 +408,10 @@ func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing
 	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID).Return(int64(4), nil)
 
 	err := validator.ValidateTokenVersion(context.Background(), authTestUserID.String(), 3)
-	require.ErrorIs(t, err, commonauth.ErrTokenVersionMismatch,
-		"err = %v, want common token version mismatch", err)
+	require.ErrorIs(t, err, platformauth.ErrTokenVersionMismatch,
+		"err = %v, want platform token version mismatch", err)
 
-	var mismatch *commonauth.TokenVersionMismatchError
+	var mismatch *platformauth.TokenVersionMismatchError
 	require.ErrorAs(t, err, &mismatch,
 		"err = %v, want structured token version mismatch", err)
 	require.False(t, mismatch.Current != 4 || mismatch.Token != 3,
@@ -419,7 +419,7 @@ func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing
 
 }
 
-func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenVersionStore, tokenCache authapplication.TokenVersionCache) commonauth.TokenVersionValidator {
+func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenVersionStore, tokenCache authapplication.TokenVersionCache) platformauth.TokenVersionValidator {
 	t.Helper()
 	cache, err := localcache.NewLoadingCache(localcache.Config{
 		Name:        "auth_token_version_test",

@@ -13,10 +13,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	contractresponse "github.com/aegiscore/common/contract/response"
-	commonmiddleware "github.com/aegiscore/common/http/middleware"
-	commonauth "github.com/aegiscore/common/security/auth"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	contractresponse "github.com/aegiscore/platform/contract/response"
+	platformmiddleware "github.com/aegiscore/platform/http/middleware"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 )
 
@@ -41,7 +41,7 @@ func TestAuthorizeReadsUserIDFromRequestContext(t *testing.T) {
 	engine := gin.New()
 	engine.GET("/api/v1/users/:user_id", Authorize(authz), func(c *gin.Context) { c.Status(http.StatusOK) })
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+authorizationTestUserID, nil)
-	request = request.WithContext(commonauth.WithUserID(context.Background(), authorizationTestUserID))
+	request = request.WithContext(platformauth.WithUserID(context.Background(), authorizationTestUserID))
 	response := httptest.NewRecorder()
 
 	engine.ServeHTTP(response, request)
@@ -56,7 +56,7 @@ func TestAuthorizeRejectsMissingOrInvalidUserID(t *testing.T) {
 		wantCode contracterrors.Code
 	}{
 		{name: "missing", wantCode: contracterrors.CodeUnauthenticated},
-		{name: "invalid type", setUser: func(c *gin.Context) { c.Set(commonauth.UserIDKey, 123) }, wantCode: contracterrors.CodeUnauthenticated},
+		{name: "invalid type", setUser: func(c *gin.Context) { c.Set(platformauth.UserIDKey, 123) }, wantCode: contracterrors.CodeUnauthenticated},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -108,7 +108,7 @@ func TestAuthorizeMapsInvalidSubjectToUnauthenticated(t *testing.T) {
 	authz.EXPECT().Enforce(gomock.Any(), "not-a-uuid", "/api/v1/users/:user_id", http.MethodGet).Return(false, permissionauthorization.ErrInvalidSubjectUserID)
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) { c.Set(commonauth.UserIDKey, "not-a-uuid") }, Authorize(authz), func(c *gin.Context) { c.Status(http.StatusOK) })
+	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) { c.Set(platformauth.UserIDKey, "not-a-uuid") }, Authorize(authz), func(c *gin.Context) { c.Status(http.StatusOK) })
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+authorizationTestUserID, nil)
 
@@ -145,23 +145,23 @@ func TestAuthorizeAllowsSuperAdminWildcardDecision(t *testing.T) {
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodDelete, "/api/v1/users/"+authorizationTestUserID, nil)
 
-	engine.DELETE("/api/v1/users/:user_id", func(c *gin.Context) { c.Set(commonauth.UserIDKey, authorizationTestUserID) }, Authorize(authz), func(c *gin.Context) { c.Status(http.StatusOK) })
+	engine.DELETE("/api/v1/users/:user_id", func(c *gin.Context) { c.Set(platformauth.UserIDKey, authorizationTestUserID) }, Authorize(authz), func(c *gin.Context) { c.Status(http.StatusOK) })
 	engine.ServeHTTP(response, request)
 
 	require.Equal(t, http.StatusOK, response.Code, "body=%s", response.Body.String())
 }
 
 func TestAuthorizeWhitelistAndOptionsBypass(t *testing.T) {
-	whitelist := commonmiddleware.WithCasbinAuthorizationWhitelist(commonmiddleware.CasbinAuthorizationWhitelistRule{
+	whitelist := platformmiddleware.WithCasbinAuthorizationWhitelist(platformmiddleware.CasbinAuthorizationWhitelistRule{
 		Method:       http.MethodGet,
 		PathTemplate: "/api/v1/users/:user_id",
 	})
 	tests := []struct {
 		name    string
 		method  string
-		options []commonmiddleware.CasbinAuthorizationOption
+		options []platformmiddleware.CasbinAuthorizationOption
 	}{
-		{name: "whitelist", method: http.MethodGet, options: []commonmiddleware.CasbinAuthorizationOption{whitelist}},
+		{name: "whitelist", method: http.MethodGet, options: []platformmiddleware.CasbinAuthorizationOption{whitelist}},
 		{name: "options", method: http.MethodOptions},
 	}
 	for _, tt := range tests {
@@ -169,7 +169,7 @@ func TestAuthorizeWhitelistAndOptionsBypass(t *testing.T) {
 			authz := NewMockAuthorizer(gomock.NewController(t))
 			gin.SetMode(gin.TestMode)
 			engine := gin.New()
-			engine.Handle(tt.method, "/api/v1/users/:user_id", func(c *gin.Context) { c.Set(commonauth.UserIDKey, authorizationTestUserID) }, Authorize(authz, tt.options...), func(c *gin.Context) { c.Status(http.StatusOK) })
+			engine.Handle(tt.method, "/api/v1/users/:user_id", func(c *gin.Context) { c.Set(platformauth.UserIDKey, authorizationTestUserID) }, Authorize(authz, tt.options...), func(c *gin.Context) { c.Status(http.StatusOK) })
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(tt.method, "/api/v1/users/"+authorizationTestUserID, nil)
 
@@ -185,7 +185,7 @@ func newAuthorizationTestEngine(t *testing.T) (*gin.Engine, *MockAuthorizer) {
 	authz := NewMockAuthorizer(gomock.NewController(t))
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) { c.Set(commonauth.UserIDKey, authorizationTestUserID) }, Authorize(authz), func(c *gin.Context) { c.Status(http.StatusOK) })
+	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) { c.Set(platformauth.UserIDKey, authorizationTestUserID) }, Authorize(authz), func(c *gin.Context) { c.Status(http.StatusOK) })
 	return engine, authz
 }
 

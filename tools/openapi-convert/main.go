@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	commonopenapi "github.com/aegiscore/common/http/openapi"
+	platformopenapi "github.com/aegiscore/platform/http/openapi"
 )
 
 const (
@@ -120,13 +120,13 @@ func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 		return exitError
 	}
 
-	doc, err := commonopenapi.ConvertSwagger2File(ctx, inputPath, convertOptions(openAPIVersion, serverURL, rootServerURL, rootPaths, bearerAuthName, bearerAuthDescription))
+	doc, err := platformopenapi.ConvertSwagger2File(ctx, inputPath, convertOptions(openAPIVersion, serverURL, rootServerURL, rootPaths, bearerAuthName, bearerAuthDescription))
 	if err != nil {
 		failf(stderr, "%v", err)
 		return exitError
 	}
 
-	goData, err := commonopenapi.RenderGoDocument(doc.JSON, commonopenapi.GoDocumentOptions{PackageName: goPackageName, GeneratedBy: generatedBy})
+	goData, err := platformopenapi.RenderGoDocument(doc.JSON, platformopenapi.GoDocumentOptions{PackageName: goPackageName, GeneratedBy: generatedBy})
 	if err != nil {
 		failf(stderr, "render Go output: %v", err)
 		return exitError
@@ -153,22 +153,22 @@ func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 }
 
 // convertOptions 组装文档转换所需的选项，包括文档版本、接口服务器地址及身份验证方式说明。
-func convertOptions(openAPIVersion string, serverURL string, rootServerURL string, rootPaths []string, bearerAuthName string, bearerAuthDescription string) commonopenapi.ConvertOptions {
+func convertOptions(openAPIVersion string, serverURL string, rootServerURL string, rootPaths []string, bearerAuthName string, bearerAuthDescription string) platformopenapi.ConvertOptions {
 	// 工具只把命令行参数转换为通用的 OpenAPI 配置，不绑定任何特定服务的私有逻辑；rootServerURL 专门用于为根路径接口（如健康检查探针）指定单独的访问地址。
-	var servers []commonopenapi.Server
+	var servers []platformopenapi.Server
 	if serverURL != "" {
-		servers = []commonopenapi.Server{{URL: serverURL}}
+		servers = []platformopenapi.Server{{URL: serverURL}}
 	}
 
-	pathServers := make(map[string][]commonopenapi.Server, len(rootPaths))
+	pathServers := make(map[string][]platformopenapi.Server, len(rootPaths))
 	for _, path := range rootPaths {
-		pathServers[path] = []commonopenapi.Server{{URL: rootServerURL}}
+		pathServers[path] = []platformopenapi.Server{{URL: rootServerURL}}
 	}
 
-	securitySchemes := map[string]commonopenapi.SecurityScheme{}
+	securitySchemes := map[string]platformopenapi.SecurityScheme{}
 	if bearerAuthName != "" {
 		// 只生成 components.securitySchemes，不自动给 operation 增加 security requirement。
-		securitySchemes[bearerAuthName] = commonopenapi.SecurityScheme{
+		securitySchemes[bearerAuthName] = platformopenapi.SecurityScheme{
 			Type:         defaultBearerAuthType,
 			Scheme:       defaultBearerAuthScheme,
 			BearerFormat: defaultBearerAuthFormat,
@@ -176,7 +176,7 @@ func convertOptions(openAPIVersion string, serverURL string, rootServerURL strin
 		}
 	}
 
-	return commonopenapi.ConvertOptions{
+	return platformopenapi.ConvertOptions{
 		OpenAPIVersion:  openAPIVersion,
 		Servers:         servers,
 		PathServers:     pathServers,

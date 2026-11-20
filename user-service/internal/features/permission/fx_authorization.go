@@ -5,8 +5,8 @@ import (
 
 	"go.uber.org/fx"
 
-	"github.com/aegiscore/common/runtime/localcache"
-	commonvalidation "github.com/aegiscore/common/validation"
+	"github.com/aegiscore/platform/runtime/localcache"
+	platformvalidation "github.com/aegiscore/platform/validation"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
@@ -145,6 +145,6 @@ func providePermissionUserRoleCacheStats(params PermissionUserRoleCacheStatsPara
 }
 
 // providePermissionController 将系统权限列表查询等功能接入到公开的 HTTP 接口。
-func providePermissionController(query permissionquery.PermissionQueryService, validator *commonvalidation.Validator) *permissionhttp.PermissionController {
+func providePermissionController(query permissionquery.PermissionQueryService, validator *platformvalidation.Validator) *permissionhttp.PermissionController {
 	return permissionhttp.NewPermissionController(query, validator)
 }

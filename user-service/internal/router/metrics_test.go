@@ -12,8 +12,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/config"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	"github.com/aegiscore/platform/runtime/config"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 )
 
 func TestRegisterMetricsRoute(t *testing.T) {
@@ -143,9 +143,9 @@ func TestIsLowNoiseRuntimeRoute(t *testing.T) {
 	require.False(t, IsLowNoiseRuntimeRoute("/metrics", metricsRouteConfig(false, "/metrics")))
 }
 
-func newRouterTestMetricsProvider(t *testing.T, enabled bool, metricsPath string) *commonmetrics.Provider {
+func newRouterTestMetricsProvider(t *testing.T, enabled bool, metricsPath string) *platformmetrics.Provider {
 	t.Helper()
-	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+	provider, err := platformmetrics.NewProvider(platformmetrics.Options{
 		Config:      metricsRouteConfig(enabled, metricsPath),
 		ServiceName: "aegiscore-user-service-test",
 		Environment: "test",
@@ -154,7 +154,7 @@ func newRouterTestMetricsProvider(t *testing.T, enabled bool, metricsPath string
 	return provider
 }
 
-func registerRouterTestCounter(t *testing.T, provider *commonmetrics.Provider) {
+func registerRouterTestCounter(t *testing.T, provider *platformmetrics.Provider) {
 	t.Helper()
 	counter := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "aegiscore_router_test_total",

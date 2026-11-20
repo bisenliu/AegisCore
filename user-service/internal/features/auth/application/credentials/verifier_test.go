@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/aegiscore/common/security/password"
+	"github.com/aegiscore/platform/security/password"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )

@@ -10,7 +10,7 @@ import (
 	"entgo.io/ent/dialect"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/platform/runtime/logger"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 

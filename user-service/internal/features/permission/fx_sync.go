@@ -7,7 +7,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/redispubsub"
+	"github.com/aegiscore/platform/runtime/redispubsub"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionredis "github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis"

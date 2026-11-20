@@ -9,7 +9,7 @@ set -euo pipefail
 #   make user-service-architecture-lint
 #
 # 执行前提：
-#   - 项目包含 common、user-service、tools/openapi-convert 等模块。
+#   - 项目包含 platform、user-service、tools/openapi-convert 等模块。
 #   - 本机需要安装 ripgrep（rg）；脚本依赖 rg 执行正则扫描。
 #   - 需要可用的常见 Unix 工具 awk、sed、head、find、wc、tr 和 git。
 #   - 存在 .git 时调用 git diff --name-only 检查 Ent/OpenAPI 生成物漂移。
@@ -17,7 +17,7 @@ set -euo pipefail
 # 行为：
 #   - 检查 Go toolchain 版本一致，并防止 CI 重复触发标准 lint 与普通单测。
 #   - 检查 Atlas dev PostgreSQL 镜像配置在 Dockerfile、Compose、atlas.hcl 和迁移脚本中一致。
-#   - 扫描 common 与 user-service 的非 import 架构边界，避免生成物漂移、Ent 根级暴露和 DI 元数据越界。
+#   - 扫描 platform 与 user-service 的非 import 架构边界，避免生成物漂移、Ent 根级暴露和 DI 元数据越界。
 #   - Go import 分层边界由根 `.golangci.yml` 的 depguard 规则承接，随 `make lint` 执行。
 #   - 检查 mock 生成文件 build tag、测试专用符号、OpenSpec 中文模板和生成物未提交漂移。
 #   - 收集所有违规项后统一退出；任一违规会以非 0 状态结束。
@@ -141,11 +141,11 @@ workflow_go_version() {
 }
 
 check_go_toolchain_version() {
-  # common/go.mod 是当前仓库 Go 版本的单一参照；go.work、服务模块和 CI 配置必须跟随它。
+  # platform/go.mod 是当前仓库 Go 版本的单一参照；go.work、服务模块和 CI 配置必须跟随它。
   local expected
-  expected="$(go_mod_version "${repo_root}/common/go.mod")"
+  expected="$(go_mod_version "${repo_root}/platform/go.mod")"
   if [[ -z "${expected}" ]]; then
-    report "common/go.mod missing go version"
+    report "platform/go.mod missing go version"
     return
   fi
 
@@ -159,7 +159,7 @@ check_go_toolchain_version() {
   done < <(
     printf 'go.work go\t%s\n' "$(go_mod_version "${repo_root}/go.work")"
     printf 'go.work toolchain\t%s\n' "$(toolchain_version "${repo_root}/go.work")"
-    for mod in common/go.mod user-service/go.mod tools/openapi-convert/go.mod tools/nacos-config-seed/go.mod; do
+    for mod in platform/go.mod user-service/go.mod tools/openapi-convert/go.mod tools/nacos-config-seed/go.mod; do
       printf '%s go\t%s\n' "${mod}" "$(go_mod_version "${repo_root}/${mod}")"
     done
     if [[ -f "${repo_root}/.github/actions/setup-go/action.yml" ]]; then
@@ -167,7 +167,7 @@ check_go_toolchain_version() {
     fi
   )
 
-  for mod in common/go.mod user-service/go.mod tools/openapi-convert/go.mod tools/nacos-config-seed/go.mod; do
+  for mod in platform/go.mod user-service/go.mod tools/openapi-convert/go.mod tools/nacos-config-seed/go.mod; do
     version="$(toolchain_version "${repo_root}/${mod}")"
     if [[ -n "${version}" && "${version}" != "${expected}" ]]; then
       report "${mod} toolchain has Go version ${version}; expected ${expected}"
@@ -212,7 +212,7 @@ check_ci_quality_workflow() {
     report "CI Docker-backed test command must call root make test-containers exactly once; found ${container_count}"
   fi
 
-  service_container_count="$( (rg -n 'make[[:space:]]+-C[[:space:]]+(common|user-service)[[:space:]]+test-containers' "${ci_workflow}" "${quality_workflow}" || true) | wc -l | tr -d ' ' )"
+  service_container_count="$( (rg -n 'make[[:space:]]+-C[[:space:]]+(platform|user-service)[[:space:]]+test-containers' "${ci_workflow}" "${quality_workflow}" || true) | wc -l | tr -d ' ' )"
   if [[ "${service_container_count}" -ne 0 ]]; then
     report "CI must not bypass root make test-containers with module-local container targets; found ${service_container_count}"
   fi
@@ -248,7 +248,7 @@ check_ent_internal_persistence_boundary() {
 
   run_rg "root-level user-service Ent import is forbidden" \
     'github\.com/aegiscore/user-service/ent(/|")' \
-    "${repo_root}/common" \
+    "${repo_root}/platform" \
     "${repo_root}/tools" \
     "${service_dir}"
 }
@@ -318,7 +318,7 @@ check_mock_generate_build_tags() {
     if [[ "$(head -n 1 "${file}")" != "//go:build generate" ]]; then
       report "mock_generate.go must use //go:build generate: ${file#"${repo_root}/"}"
     fi
-  done < <(find "${repo_root}/common" "${service_dir}" -type f -name 'mock_generate.go' -print)
+  done < <(find "${repo_root}/platform" "${service_dir}" -type f -name 'mock_generate.go' -print)
 }
 
 check_test_only_production_symbols() {
@@ -341,11 +341,11 @@ check_test_only_production_symbols() {
         ;;
     esac
   done < <(
-    find "${repo_root}/common" "${service_dir}" \
+    find "${repo_root}/platform" "${service_dir}" \
       -type f -name '*.go' \
       ! -name '*_test.go' \
       ! -name 'mock_generate.go' \
-      ! -path "${repo_root}/common/testing/*" \
+      ! -path "${repo_root}/platform/testing/*" \
       ! -path "${service_dir}/internal/persistence/ent/*" \
       ! -path "${service_dir}/docs/*" \
       -print
@@ -476,11 +476,11 @@ check_environment_variable_config_removed() {
     '\bConfigPath\b|USER_SERVICE_CONFIG|configs/config\.yaml' \
     --glob '*.go' \
     --glob '!*_test.go' \
-    --glob '!common/testing/**' \
+    --glob '!platform/testing/**' \
     --glob '!user-service/internal/persistence/ent/**' \
     --glob '!user-service/docs/**' \
     --glob '!cmd/rbac_bootstrap_super_admin.go' \
-    "${repo_root}/common" \
+    "${repo_root}/platform" \
     "${service_dir}"
 
   run_rg_any "Docker Compose runtime config must not mount local full config or pass --config" \
@@ -501,15 +501,15 @@ check_environment_variable_config_removed() {
   fi
 }
 
-check_common_metrics_business_semantics() {
-  # common metrics 只承载跨服务观测 primitive，不拥有 user-service 或 RBAC 业务指标。
-  local common_metrics_dir="${repo_root}/common/runtime/observability/metrics"
-  if [[ ! -d "${common_metrics_dir}" ]]; then
+check_platform_metrics_business_semantics() {
+  # platform metrics 只承载跨服务观测 primitive，不拥有 user-service 或 RBAC 业务指标。
+  local platform_metrics_dir="${repo_root}/platform/runtime/observability/metrics"
+  if [[ ! -d "${platform_metrics_dir}" ]]; then
     return
   fi
-  run_rg "common runtime metrics must not contain service or RBAC business metrics semantics" \
+  run_rg "platform runtime metrics must not contain service or RBAC business metrics semantics" \
     'Casbin|casbin|permission|role|rbac|user-service|aegiscore_casbin' \
-    "${common_metrics_dir}"
+    "${platform_metrics_dir}"
 }
 
 # 步骤 1：校验 Go 版本在 go.work、各模块和 CI workflow 中保持一致。
@@ -530,8 +530,8 @@ check_helm_user_service_immutable_image
 # 步骤 6：校验旧本地完整配置文件入口没有回流到 Go 代码、Compose、Kubernetes、Helm 或 workflow。
 check_environment_variable_config_removed
 
-# 步骤 7：校验 common metrics 只承载跨服务 primitive，不包含 user-service 或 RBAC 业务语义。
-check_common_metrics_business_semantics
+# 步骤 7：校验 platform metrics 只承载跨服务 primitive，不包含 user-service 或 RBAC 业务语义。
+check_platform_metrics_business_semantics
 
 # 步骤 8：校验 mock_generate.go 只在 generate build tag 下参与 mockgen。
 check_mock_generate_build_tags
@@ -565,8 +565,8 @@ fi
 for forbidden_mock_dir in \
   "${repo_root}/mocks" \
   "${repo_root}/testmocks" \
-  "${repo_root}/common/mocks" \
-  "${repo_root}/common/testmocks" \
+  "${repo_root}/platform/mocks" \
+  "${repo_root}/platform/testmocks" \
   "${service_dir}/mocks" \
   "${service_dir}/testmocks"; do
   if [[ -d "${forbidden_mock_dir}" ]]; then
@@ -654,7 +654,7 @@ run_rg_any "OpenSpec/OPSX markdown must use Simplified Chinese instead of defaul
 
 # 步骤 25：校验手写 Go 代码的函数、方法和导出声明都有紧邻的中文说明。
 if ! commentcheck_output="$(
-  cd "${repo_root}/common" &&
+  cd "${repo_root}/platform" &&
     go run ./testing/commentcheck/cmd -root "${repo_root}"
 )"; then
   report "手写 Go 代码必须为函数、方法和导出声明提供紧邻、可读的中文注释"$'\n'"${commentcheck_output}"

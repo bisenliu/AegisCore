@@ -18,12 +18,12 @@ class RenameProjectTest(unittest.TestCase):
         (self.root / 'scripts').mkdir()
         shutil.copy2(SCRIPT, self.root / 'scripts/rename-project.sh')
         self.write('project.yaml', 'module_prefix: github.com/templatekit\nenv_prefix: TEMPLATEKIT\nmetric_prefix: templatekit\nimage_prefix: templatekit\ndisplay_name: TemplateKit\n')
-        self.write('sample.txt', 'github.com/templatekit/common TEMPLATEKIT_PORT templatekit_requests templatekit.user templatekit/user TemplateKit templatekit\n')
+        self.write('sample.txt', 'github.com/templatekit/platform TEMPLATEKIT_PORT templatekit_requests templatekit.user templatekit/user TemplateKit templatekit\n')
         self.write('charts/templatekit/nested/templatekit file\nname.yaml', 'templatekit/user\n')
         self.write('user-service/internal/shared/rbacbaseline/ids.go', 'TemplateKit immutable UUID\n')
         self.write('.github/workflows/ci.yml', 'name: TemplateKit\n')
         self.write('renovate.json', '{}\n')
-        self.write('coverage/common.txt', 'coverage report\n')
+        self.write('coverage/platform.txt', 'coverage report\n')
         self.write('.gitignore', 'cache/\n')
         self.write('cache/templatekit.txt', 'templatekit\n')
         self.git('init', '-q')
@@ -54,7 +54,7 @@ class RenameProjectTest(unittest.TestCase):
         self.assertEqual((self.root / '.github/workflows/ci.yml').read_text(), 'name: TemplateKit\n')
         self.assertEqual((self.root / 'renovate.json').read_text(), '{}\n')
         self.assertEqual((self.root / 'cache/templatekit.txt').read_text(), 'templatekit\n')
-        self.assertEqual((self.root / 'coverage/common.txt').read_text(), 'coverage report\n')
+        self.assertEqual((self.root / 'coverage/platform.txt').read_text(), 'coverage report\n')
 
     def test_single_pass_from_subdirectory_and_override(self):
         result = self.run_script('--apply', '--skip-generate', '--module',
@@ -63,7 +63,7 @@ class RenameProjectTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertFalse((self.root / 'project.yaml').exists())
         self.assertEqual((self.root / 'sample.txt').read_text(),
-                         'github.com/example/templatekit-app/common TEMPLATEKIT_APP_PORT templatekit_app_requests templatekit_app.user templatekit-app/user TemplateKitApp templatekit_app\n')
+                         'github.com/example/templatekit-app/platform TEMPLATEKIT_APP_PORT templatekit_app_requests templatekit_app.user templatekit-app/user TemplateKitApp templatekit_app\n')
         self.assertTrue((self.root / 'charts/templatekit-app/nested/templatekit-app file\nname.yaml').is_file())
         self.assertEqual((self.root / 'cache/templatekit.txt').read_text(), 'templatekit\n')
         self.assertEqual((self.root / 'user-service/internal/shared/rbacbaseline/ids.go').read_text(), 'TemplateKit immutable UUID\n')
@@ -102,7 +102,7 @@ class RenameProjectTest(unittest.TestCase):
         result = self.run_script('--apply', '--skip-generate', '--module',
                                  'github.com/templatekit', '--name', 'new-app')
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertTrue((self.root / 'sample.txt').read_text().startswith('github.com/templatekit/common '))
+        self.assertTrue((self.root / 'sample.txt').read_text().startswith('github.com/templatekit/platform '))
         self.assertEqual(binary.read_bytes(), b'\x00templatekit\xff')
         self.assertEqual(external.read_text(), 'templatekit')
 

@@ -7,7 +7,7 @@
 需要先走 OPSX 的情况：
 
 - 改变用户、认证、RBAC、共享契约、OpenAPI、数据库 schema、部署或观测行为。
-- 影响多个 feature、多个模块或 `common/` 共享能力。
+- 影响多个 feature、多个模块或 `platform/` 共享能力。
 - 新增、删除或修改长期稳定 capability。
 - 需要迁移、回滚、发布顺序或安全影响分析。
 

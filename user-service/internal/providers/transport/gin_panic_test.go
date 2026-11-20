@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	"github.com/aegiscore/common/runtime/config"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	contracterrors "github.com/aegiscore/platform/contract/errors"
+	"github.com/aegiscore/platform/runtime/config"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 )
 
 func TestNewGinEngineRecordsPanicHTTPServerMetrics(t *testing.T) {
@@ -32,9 +32,9 @@ func TestNewGinEngineRecordsPanicHTTPServerMetrics(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 
 	metric := findGinMetricByLabels(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), map[string]string{
-		commonmetrics.LabelMethod:      http.MethodGet,
-		commonmetrics.LabelRoute:       "/api/v1/panic",
-		commonmetrics.LabelStatusClass: "5xx",
+		platformmetrics.LabelMethod:      http.MethodGet,
+		platformmetrics.LabelRoute:       "/api/v1/panic",
+		platformmetrics.LabelStatusClass: "5xx",
 	})
 	require.Equal(t, float64(1), metric.GetCounter().GetValue())
 }

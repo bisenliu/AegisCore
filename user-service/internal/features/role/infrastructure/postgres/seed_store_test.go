@@ -12,7 +12,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 
-	runtimeid "github.com/aegiscore/common/runtime/id"
+	runtimeid "github.com/aegiscore/platform/runtime/id"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"

@@ -14,7 +14,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/testing/containers"
+	"github.com/aegiscore/platform/testing/containers"
 	rolebootstrap "github.com/aegiscore/user-service/internal/features/role/application/bootstrap"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 	"github.com/aegiscore/user-service/internal/persistence/ent"

@@ -14,7 +14,7 @@ import (
 	rediscmd "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/testing/containers"
+	"github.com/aegiscore/platform/testing/containers"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissioncasbin "github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"

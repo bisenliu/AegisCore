@@ -20,8 +20,8 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/aegiscore/common/runtime/config"
-	commonlogger "github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/platform/runtime/config"
+	platformlogger "github.com/aegiscore/platform/runtime/logger"
 )
 
 type lifecycleRecorder struct {
@@ -371,7 +371,7 @@ func TestHTTPRuntimeStartLogIncludesRuntimeIdentity(t *testing.T) {
 	require.Len(t, entries, 1)
 	require.Equal(t, "http", entries[0].LoggerName)
 	fields := entries[0].ContextMap()
-	require.Equal(t, "http-server", fields[commonlogger.ComponentField])
+	require.Equal(t, "http-server", fields[platformlogger.ComponentField])
 	require.Equal(t, "127.0.0.1:0", fields["addr"])
 	require.Equal(t, "aegiscore-user-service", fields["service"])
 	require.Equal(t, "local", fields["environment"])

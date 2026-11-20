@@ -3,9 +3,9 @@ package rolehttp
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/aegiscore/common/http/binding"
-	"github.com/aegiscore/common/http/response"
-	commonvalidation "github.com/aegiscore/common/validation"
+	"github.com/aegiscore/platform/http/binding"
+	"github.com/aegiscore/platform/http/response"
+	platformvalidation "github.com/aegiscore/platform/validation"
 	rolecommand "github.com/aegiscore/user-service/internal/features/role/application/command"
 	rolequery "github.com/aegiscore/user-service/internal/features/role/application/query"
 )
@@ -14,11 +14,11 @@ import (
 type RoleController struct {
 	commands  rolecommand.RoleCommandService
 	queries   rolequery.RoleQueryService
-	validator *commonvalidation.Validator
+	validator *platformvalidation.Validator
 }
 
 // NewRoleController 创建角色接口控制器，组装角色增删改查以及参数校验服务。
-func NewRoleController(commands rolecommand.RoleCommandService, queries rolequery.RoleQueryService, validator *commonvalidation.Validator) *RoleController {
+func NewRoleController(commands rolecommand.RoleCommandService, queries rolequery.RoleQueryService, validator *platformvalidation.Validator) *RoleController {
 	return &RoleController{commands: commands, queries: queries, validator: validator}
 }
 

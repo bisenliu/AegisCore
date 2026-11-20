@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/platform/runtime/config"
 )
 
 func TestPprofDisabledDoesNotConstructManagedRegisterLifecycleOrListen(t *testing.T) {

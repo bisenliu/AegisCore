@@ -6,7 +6,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 )
 
@@ -52,7 +52,7 @@ type prometheusMetrics struct {
 }
 
 // newAuthMetrics 创建用于统计用户登录、凭证续期、退出等操作成功和失败频次的监控指标。
-func newAuthMetrics(provider *commonmetrics.Provider) (authapplication.Metrics, error) {
+func newAuthMetrics(provider *platformmetrics.Provider) (authapplication.Metrics, error) {
 	if provider == nil || !provider.Enabled() {
 		return authapplication.NopMetrics(), nil
 	}
@@ -100,32 +100,32 @@ func newAuthMetrics(provider *commonmetrics.Provider) (authapplication.Metrics, 
 
 // LoginSucceeded 记录用户成功登录的次数。
 func (m *prometheusMetrics) LoginSucceeded(_ context.Context) {
-	m.operations.WithLabelValues(authapplication.MetricsOperationLogin, commonmetrics.StatusSuccess, authapplication.MetricsReasonNone).Inc()
+	m.operations.WithLabelValues(authapplication.MetricsOperationLogin, platformmetrics.StatusSuccess, authapplication.MetricsReasonNone).Inc()
 }
 
 // LoginFailed 记录用户登录失败的次数及具体失败原因。
 func (m *prometheusMetrics) LoginFailed(_ context.Context, reason string) {
-	m.operations.WithLabelValues(authapplication.MetricsOperationLogin, commonmetrics.StatusFailure, authReason(reason)).Inc()
+	m.operations.WithLabelValues(authapplication.MetricsOperationLogin, platformmetrics.StatusFailure, authReason(reason)).Inc()
 }
 
 // RefreshSucceeded 记录凭证续期成功的次数。
 func (m *prometheusMetrics) RefreshSucceeded(_ context.Context) {
-	m.operations.WithLabelValues(authapplication.MetricsOperationRefresh, commonmetrics.StatusSuccess, authapplication.MetricsReasonNone).Inc()
+	m.operations.WithLabelValues(authapplication.MetricsOperationRefresh, platformmetrics.StatusSuccess, authapplication.MetricsReasonNone).Inc()
 }
 
 // RefreshFailed 记录凭证续期失败的次数及原因。
 func (m *prometheusMetrics) RefreshFailed(_ context.Context, reason string) {
-	m.operations.WithLabelValues(authapplication.MetricsOperationRefresh, commonmetrics.StatusFailure, authReason(reason)).Inc()
+	m.operations.WithLabelValues(authapplication.MetricsOperationRefresh, platformmetrics.StatusFailure, authReason(reason)).Inc()
 }
 
 // LogoutSucceeded 记录用户退出登录成功的次数（区分仅退出当前设备还是退出所有设备）。
 func (m *prometheusMetrics) LogoutSucceeded(_ context.Context, operation string) {
-	m.operations.WithLabelValues(authLogoutOperation(operation), commonmetrics.StatusSuccess, authapplication.MetricsReasonNone).Inc()
+	m.operations.WithLabelValues(authLogoutOperation(operation), platformmetrics.StatusSuccess, authapplication.MetricsReasonNone).Inc()
 }
 
 // LogoutFailed 记录用户退出登录失败的次数。
 func (m *prometheusMetrics) LogoutFailed(_ context.Context, operation string, reason string) {
-	m.operations.WithLabelValues(authLogoutOperation(operation), commonmetrics.StatusFailure, authReason(reason)).Inc()
+	m.operations.WithLabelValues(authLogoutOperation(operation), platformmetrics.StatusFailure, authReason(reason)).Inc()
 }
 
 // TokenVersionMismatch 记录用户携带的凭证版本与服务器最新记录不一致的拦截次数（通常表示用户在其他地方改密或已作废旧凭证）。

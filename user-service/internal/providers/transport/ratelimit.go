@@ -7,15 +7,15 @@ import (
 	"go.uber.org/fx"
 	"golang.org/x/time/rate"
 
-	commonmw "github.com/aegiscore/common/http/middleware"
+	platformmw "github.com/aegiscore/platform/http/middleware"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 // APIRateLimiters 包含 user-service 路由使用的限流器。
 type APIRateLimiters struct {
-	Anonymous     commonmw.RateLimiter
-	Authenticated commonmw.RateLimiter
-	closers       []*commonmw.LocalRateLimiter
+	Anonymous     platformmw.RateLimiter
+	Authenticated platformmw.RateLimiter
+	closers       []*platformmw.LocalRateLimiter
 }
 
 // NewAPIRateLimiters 根据服务私有限流配置构造本地限流资源并注册 lifecycle。
@@ -66,13 +66,13 @@ func (l *APIRateLimiters) Close() {
 }
 
 // newLocalRateLimiter 创建基于本地内存的高频访问限制器，防止恶意刷接口。
-func newLocalRateLimiter(cfg serviceconfig.RateLimitPolicyConfig, shards int) (*commonmw.LocalRateLimiter, error) {
-	return commonmw.NewLocalRateLimiter(commonmw.LocalRateLimiterOptions{
+func newLocalRateLimiter(cfg serviceconfig.RateLimitPolicyConfig, shards int) (*platformmw.LocalRateLimiter, error) {
+	return platformmw.NewLocalRateLimiter(platformmw.LocalRateLimiterOptions{
 		Rate:            rate.Limit(cfg.RatePerSecond),
 		Burst:           cfg.Burst,
 		Shards:          shards,
 		MaxKeys:         cfg.MaxKeys,
-		CapacityPolicy:  commonmw.RateLimitCapacityPolicy(cfg.CapacityPolicy),
+		CapacityPolicy:  platformmw.RateLimitCapacityPolicy(cfg.CapacityPolicy),
 		KeyTTL:          cfg.KeyTTL,
 		CleanupInterval: serviceconfig.RateLimitCleanupInterval,
 	})

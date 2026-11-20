@@ -4,9 +4,9 @@
 
 | 命令 | 用途 |
 |---|---|
-| `make test` | 运行 `common` 和 `user-service` 的 Go 测试 |
-| `make test-containers` | 显式运行 `common` 和 `user-service` 的全部 Docker-backed 测试 |
-| `make coverage` | 生成覆盖率报告并检查 `common` 与 user-service 手写包覆盖率基线 |
+| `make test` | 运行 `platform` 和 `user-service` 的 Go 测试 |
+| `make test-containers` | 显式运行 `platform` 和 `user-service` 的全部 Docker-backed 测试 |
+| `make coverage` | 生成覆盖率报告并检查 `platform` 与 user-service 手写包覆盖率基线 |
 | `make lint` | 运行各模块 `golangci-lint` |
 | `make user-service-architecture-lint` | 检查 user-service 架构边界、生成物 drift 和 OPSX 文档语言约束 |
 | `make user-service-openapi-generate` | 生成 OpenAPI 3 文档 |
@@ -20,10 +20,10 @@
 
 Go 单元测试位于对应包内，以 `_test.go` 结尾。常见覆盖范围：
 
-- `common/contract/`：错误、响应和分页契约。
-- `common/http/`：binding、middleware、OpenAPI 和 response helper。
-- `common/runtime/`：config、datastore、logger、metrics、scheduler、workerpool、timezone。
-- `common/security/`：JWT verifier、token version validator 契约、Casbin authorizer、password；user-service token issuer 和 claims 测试位于 `user-service/internal/features/auth/`。
+- `platform/contract/`：错误、响应和分页契约。
+- `platform/http/`：binding、middleware、OpenAPI 和 response helper。
+- `platform/runtime/`：config、datastore、logger、metrics、scheduler、workerpool、timezone。
+- `platform/security/`：JWT verifier、token version validator 契约、Casbin authorizer、password；user-service token issuer 和 claims 测试位于 `user-service/internal/features/auth/`。
 - `user-service/internal/features/*/domain`：领域对象和错误。
 - `user-service/internal/features/*/application`：command、query、validator、service 和 seed。
 - `user-service/internal/features/*/transport/http`：controller、input、mapper 和 routes。
@@ -32,7 +32,7 @@ Go 单元测试位于对应包内，以 `_test.go` 结尾。常见覆盖范围�
 运行单模块测试：
 
 ```bash
-make common-test
+make platform-test
 make user-service-test
 ```
 
@@ -44,22 +44,22 @@ make user-service-test
 
 CI 的 coverage job 和本地 `make coverage` 使用同一个仓库级脚本 `scripts/check-coverage.sh`。脚本输出并上传三个 profile：
 
-- `coverage/common.out` 与 `coverage/common.txt`：`common` 全量 statement coverage，默认最低基线为 `COMMON_MIN_COVERAGE=75.0`。
+- `coverage/platform.out` 与 `coverage/platform.txt`：`platform` 全量 statement coverage，默认最低基线为 `PLATFORM_MIN_COVERAGE=75.0`。
 - `coverage/user-service.out` 与 `coverage/user-service.txt`：user-service 全量 statement coverage，仅用于可见性，数值会包含 Ent/OpenAPI 生成代码。
 - `coverage/user-service-handwritten.out` 与 `coverage/user-service-handwritten.txt`：user-service 手写包覆盖率门禁，排除 `user-service/docs/openapi.go` 和 `user-service/internal/persistence/ent/` 下除 `schema/` 外的 Ent 生成物，默认最低基线为 `USER_SERVICE_HANDWRITTEN_MIN_COVERAGE=75.0`。
-- changed-code coverage：在 PR 或设置 `CHANGED_COVERAGE_BASE` 时检查 `common` 与 user-service 手写 Go 文件变更行，默认最低基线为 `CHANGED_CODE_MIN_COVERAGE=80.0`；只统计落入 coverage block 的可执行行。
+- changed-code coverage：在 PR 或设置 `CHANGED_COVERAGE_BASE` 时检查 `platform` 与 user-service 手写 Go 文件变更行，默认最低基线为 `CHANGED_CODE_MIN_COVERAGE=80.0`；只统计落入 coverage block 的可执行行。
 
 调整基线时必须显式覆盖环境变量并同步记录原因，例如：
 
 ```bash
-COMMON_MIN_COVERAGE=76.0 USER_SERVICE_HANDWRITTEN_MIN_COVERAGE=76.0 make coverage
+PLATFORM_MIN_COVERAGE=76.0 USER_SERVICE_HANDWRITTEN_MIN_COVERAGE=76.0 make coverage
 CHANGED_COVERAGE_BASE=origin/main CHANGED_CODE_MIN_COVERAGE=85.0 make coverage
 ```
 
 Localcache 行为或消费边界变化后，需用 race detector 覆盖固定 TTL、容量驱逐、singleflight、caller 取消、loader timeout、强失效和 fail-closed 场景：
 
 ```bash
-cd common
+cd platform
 go test -race ./runtime/localcache ./runtime/observability/metrics
 
 cd ../user-service
@@ -78,12 +78,12 @@ go test -race ./internal/features/auth/... ./internal/features/permission/...
 
 ## 3. 集成测试和 e2e
 
-集成和 e2e 测试使用真实依赖时优先复用 `common/testing/containers/`：
+集成和 e2e 测试使用真实依赖时优先复用 `platform/testing/containers/`：
 
-- `common/testing/containers/postgres.go`
-- `common/testing/containers/redis.go`
+- `platform/testing/containers/postgres.go`
+- `platform/testing/containers/redis.go`
 
-user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration 和测试 harness。HTTP harness 在启动 Fx App 前加载一次 service config，并复用 `bootstrap.AppOptions`，使测试与正式 App 使用相同的 service/runtime config 和 composition root 接线。CI 的阻塞式 `container-test` job 运行根 `make test-containers`：根 target 分别调用 common 与 user-service 的模块 target，由模块 target 显式传递 `-aegiscore.testcontainers` flag，覆盖 common PostgreSQL/Redis fixture、permission/role PostgreSQL 集成测试和 user-service HTTP E2E；普通单测只由复用质量 workflow 的 `unit` job 运行一次。
+user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration 和测试 harness。HTTP harness 在启动 Fx App 前加载一次 service config，并复用 `bootstrap.AppOptions`，使测试与正式 App 使用相同的 service/runtime config 和 composition root 接线。CI 的阻塞式 `container-test` job 运行根 `make test-containers`：根 target 分别调用 platform 与 user-service 的模块 target，由模块 target 显式传递 `-aegiscore.testcontainers` flag，覆盖 platform PostgreSQL/Redis fixture、permission/role PostgreSQL 集成测试和 user-service HTTP E2E；普通单测只由复用质量 workflow 的 `unit` job 运行一次。
 
 配置 fixture 必须使用最终严格契约：核心路径为 `app/server/log/observability`，服务资源位于 `resources.redis.cache_redis` 和 `resources.postgres.primary_db`，feature cache 位于 `auth.token_version_cache` 与 `rbac.user_role_cache`，正向 fixture 只包含 `enabled` 和 `ttl`。Redis 正向 fixture 必须显式配置 `mode`；`cluster` 使用 `addrs`、`timeout` 和可选 `cluster.max_redirects`，`standalone` 使用 `addr` 和 `timeout`，两种 mode 均固定使用 Redis 0 号库且不暴露 `db` 配置。旧路径只允许出现在 strict decoder 负向测试中，用于证明未知字段会被拒绝；正向 fixture 必须能够通过 Nacos 分层配置合成后的 strict decode。
 
@@ -95,7 +95,7 @@ user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration
 make test-containers
 ```
 
-`make test-containers` 是完整真实依赖门禁的唯一仓库入口。common 与 user-service 的模块 target 使用 `-v -count=1`，在日志中记录实际执行的测试名和耗时，并禁止 Go test cache 代替真实执行。Docker daemon、镜像拉取、容器启动、连接、migration 或配置失败时必须使测试失败；已传入 `-aegiscore.testcontainers` 后 Docker-backed 测试不得静默 skip。`AEGISCORE_TEST_CONTAINERS` 不是受支持的开关。
+`make test-containers` 是完整真实依赖门禁的唯一仓库入口。platform 与 user-service 的模块 target 使用 `-v -count=1`，在日志中记录实际执行的测试名和耗时，并禁止 Go test cache 代替真实执行。Docker daemon、镜像拉取、容器启动、连接、migration 或配置失败时必须使测试失败；已传入 `-aegiscore.testcontainers` 后 Docker-backed 测试不得静默 skip。`AEGISCORE_TEST_CONTAINERS` 不是受支持的开关。
 
 ### RBAC policy sync 故障注入
 
@@ -214,8 +214,8 @@ Go import 分层边界由根 `.golangci.yml` 的 `depguard` 规则随 `make lint
 - 检查 OpenAPI 和 Ent 生成物 drift。
 - 检查 `openspec/specs/`、`openspec/changes/` 和 `docs/opsx/` 下 Markdown 是否保留默认英文模板内容。
 - 检查手写生产 Go 代码的函数、方法和导出声明是否有紧邻、通俗可读的中文文档注释（非必要不使用技术黑话，让非开发人员也可以看懂）；Ent、OpenAPI、Mock 等生成代码和测试代码不在该扫描范围内。
-- 检查 `common/` 与 `user-service/` 的 `mock_generate.go` 是否使用 `generate` build tag。
-- 检查人工维护的正式 Go 文件是否新增 `*ForTest` 或 `testHook*` 等明确测试语义 symbol；`_test.go`、`common/testing`、Ent 和 OpenAPI 生成物不在该扫描范围内。
+- 检查 `platform/` 与 `user-service/` 的 `mock_generate.go` 是否使用 `generate` build tag。
+- 检查人工维护的正式 Go 文件是否新增 `*ForTest` 或 `testHook*` 等明确测试语义 symbol；`_test.go`、`platform/testing`、Ent 和 OpenAPI 生成物不在该扫描范围内。
 - 人工搜索和审查应默认排除 `user-service/internal/persistence/ent/` 下除 `schema/` 外的 Ent 生成物；生成物 drift 仍由 `make user-service-architecture-lint`、`make user-service-generate` 和 `make verify` 暴露。
 
 运行：

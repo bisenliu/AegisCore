@@ -495,7 +495,7 @@ stop
 | --- | --- | --- |
 | `fx.WithLogger(constructor)` / `fx.NopLogger` | `WithLogger` 让 Fx 自身事件接入指定的 `fxevent.Logger`。`NopLogger` 关闭 Fx 框架自身的事件输出。 | `AppOptions` 使用 `logger.NewFxEventLogger` 将框架事件接入 zap；练习使用 `NopLogger` 净化屏幕输出。 |
 | `fx.RecoverFromPanics()` | 将依赖装配阶段构造器、装饰器或 `Invoke` 中的 panic 转换为普通 Go error 返回。 | `bootstrap.AppOptions` 默认开启，增强容错能力。 |
-| `fx.DotGraph` / `fx.VisualizeError(err)` | `DotGraph` 是 Graphviz 格式的依赖图文本；`VisualizeError` 将装配错误转化为可视化拓扑图。 | `common/runtime/fxgraph` 的 `RenderDOT` 导出拓扑，辅助架构分析。 |
+| `fx.DotGraph` / `fx.VisualizeError(err)` | `DotGraph` 是 Graphviz 格式的依赖图文本；`VisualizeError` 将装配错误转化为可视化拓扑图。 | `platform/runtime/fxgraph` 的 `RenderDOT` 导出拓扑，辅助架构分析。 |
 | `fx.ValidateApp(opts...)` | 纯静态校验选项与依赖是否闭环，**不执行任何构造函数或初始化逻辑**。 | 架构静态检查与单元测试中验证依赖连线是否漏配。 |
 | `fxtest.New(t, opts...)` / `RequireStart()` / `RequireStop()` | `fxtest` 是专门的测试工具包。自动重定向测试日志，启停失败立即终止当前测试（`FailNow`）。 | 端到端与集成测试中启动测试服务。 |
 | `fxtest.NewLifecycle(t, opts...)` | 构造可独立驱动生命周期的测试登记器，无需搭建完整 Fx App。 | `postgres_test.go`、`ratelimit_test.go` 等单组件生命周期测试。 |
@@ -728,7 +728,7 @@ sequenceDiagram
 | **Feature 应用** | 纯业务编排、Command 用例、Query 查询服务与领域能力 | `NewUserQueryService`、`NewLoginUseCase`、`NewRoleCommandService` |
 | **传输** | 对外暴露的 HTTP 控制器、路由映射总装与 Web 引擎构建 | `NewUserController`、`RegisterRoutes`、`NewGinEngine`、`NewHTTPServer` |
 | **生命周期** | 需要随进程启停主动执行的初始化动作、钩子注册或后台常驻任务 | `registerRBACLifecycle`（加载策略并启动 watcher）、`registerRuntimeServers` |
-| **开发工具** | 仅在本地开发、诊断或构建期生效的辅助功能 | `NewPprofServer`、`common/runtime/fxgraph`（导出依赖图） |
+| **开发工具** | 仅在本地开发、诊断或构建期生效的辅助功能 | `NewPprofServer`、`platform/runtime/fxgraph`（导出依赖图） |
 
 ### 编写装配代码的五项铁律
 

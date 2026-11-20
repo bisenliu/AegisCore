@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/platform/runtime/logger"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"

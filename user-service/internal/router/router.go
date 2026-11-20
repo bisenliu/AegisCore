@@ -6,10 +6,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	commonmw "github.com/aegiscore/common/http/middleware"
-	"github.com/aegiscore/common/runtime/config"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	commonauth "github.com/aegiscore/common/security/auth"
+	platformmw "github.com/aegiscore/platform/http/middleware"
+	"github.com/aegiscore/platform/runtime/config"
+	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
@@ -22,13 +22,13 @@ type RouteParams struct {
 	ServiceName           string
 	Environment           string
 	Log                   *zap.Logger
-	JWT                   commonauth.AccessTokenVerifier
+	JWT                   platformauth.AccessTokenVerifier
 	MetricsConfig         config.MetricsConfig
 	HealthChecks          HealthChecks
-	Metrics               *commonmetrics.Provider
-	AnonymousRateLimiter  commonmw.RateLimiter
-	UserRateLimiter       commonmw.RateLimiter
-	TokenVersionValidator commonauth.TokenVersionValidator
+	Metrics               *platformmetrics.Provider
+	AnonymousRateLimiter  platformmw.RateLimiter
+	UserRateLimiter       platformmw.RateLimiter
+	TokenVersionValidator platformauth.TokenVersionValidator
 	Authorizer            permissionauthorization.Authorizer
 	Auth                  *authhttp.AuthController
 	Permission            *permissionhttp.PermissionController
@@ -59,13 +59,13 @@ func registerV1Routes(engine *gin.Engine, params RouteParams, rateLimitObserver 
 	v1 := engine.Group("/api/v1")
 
 	publicAuth := v1.Group("/auth")
-	publicAuth.Use(commonmw.RateLimit(rateLimitObserver.options("anonymous_auth", params.AnonymousRateLimiter, commonmw.IPRateLimitKey("anonymous-auth"))))
+	publicAuth.Use(platformmw.RateLimit(rateLimitObserver.options("anonymous_auth", params.AnonymousRateLimiter, platformmw.IPRateLimitKey("anonymous-auth"))))
 	authhttp.RegisterPublicRoutes(publicAuth, params.Auth)
 
 	// 路由分层必须先认证再授权：auth 保护接口只需要登录态，permission/role/user 等业务接口还需 RBAC 授权。
 	authenticated := v1.Group("")
-	authenticated.Use(commonmw.AuthWithTokenVersionValidator(params.Log, params.JWT, params.TokenVersionValidator))
-	authenticated.Use(commonmw.RateLimit(rateLimitObserver.options("authenticated_api", params.UserRateLimiter, commonmw.UserIDRateLimitKey("authenticated-api"))))
+	authenticated.Use(platformmw.AuthWithTokenVersionValidator(params.Log, params.JWT, params.TokenVersionValidator))
+	authenticated.Use(platformmw.RateLimit(rateLimitObserver.options("authenticated_api", params.UserRateLimiter, platformmw.UserIDRateLimitKey("authenticated-api"))))
 
 	authhttp.RegisterProtectedRoutes(authenticated.Group("/auth"), params.Auth)
 

@@ -11,8 +11,8 @@ import (
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/validation"
+	"github.com/aegiscore/platform/runtime/config"
+	"github.com/aegiscore/platform/validation"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 )
@@ -133,7 +133,7 @@ func TestRuntimeModuleRegistersRuntimeServersThroughNamedInvoke(t *testing.T) {
 	require.Contains(t, source, "fx.Invoke(registerRuntimeServers)")
 	require.Contains(t, source, "func registerRuntimeServers(_ *HTTPRuntime, _ *PprofRuntime) {}")
 	require.Contains(t, source, "func InitProcessRuntime(settings serviceconfig.TimezoneSettings) error")
-	require.NotContains(t, source, "commontz.Module")
+	require.NotContains(t, source, "platformtz.Module")
 	require.NotContains(t, source, "func(*HTTPRuntime) {}")
 	require.NotContains(t, source, "func(*PprofRuntime) {}")
 }

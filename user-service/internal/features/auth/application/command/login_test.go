@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	commonauth "github.com/aegiscore/common/security/auth"
+	platformauth "github.com/aegiscore/platform/security/auth"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
@@ -46,7 +46,7 @@ func TestAuthUseCaseLogin(t *testing.T) {
 	require.NoError(t, err,
 		"Login: %v", err)
 	require.False(t, result.PasswordChangeRequired)
-	require.False(t, result.Tokens.AccessToken != "access" || result.Tokens.RefreshToken != "refresh" || result.Tokens.TokenType != commonauth.TokenTypeBearer || result.Tokens.ExpiresIn != 900,
+	require.False(t, result.Tokens.AccessToken != "access" || result.Tokens.RefreshToken != "refresh" || result.Tokens.TokenType != platformauth.TokenTypeBearer || result.Tokens.ExpiresIn != 900,
 		"tokens = %#v", result.Tokens)
 
 }
@@ -224,7 +224,7 @@ func TestAuthUseCaseLoginRejectsInactiveStatuses(t *testing.T) {
 func TestAuthUseCaseLoginIssuesPasswordChangeToken(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
 	credential := &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", Status: identity.UserStatusMustChangePassword, TokenVersion: 2}
-	passwordChange := &authtokens.TokenResult{AccessToken: "password-change", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}
+	passwordChange := &authtokens.TokenResult{AccessToken: "password-change", TokenType: platformauth.TokenTypeBearer, ExpiresIn: 900}
 	claims := passwordChangeClaims("pc-123", 2)
 
 	fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(credential, nil)

@@ -4,7 +4,7 @@ go 1.27.4
 
 require (
 	entgo.io/ent v0.14.6
-	github.com/aegiscore/common v0.0.0
+	github.com/aegiscore/platform v0.0.0
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/casbin/casbin/v3 v3.10.0
 	github.com/gin-gonic/gin v1.12.0
@@ -119,6 +119,6 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace github.com/aegiscore/common => ../common
+replace github.com/aegiscore/platform => ../platform
 
 tool go.uber.org/mock/mockgen

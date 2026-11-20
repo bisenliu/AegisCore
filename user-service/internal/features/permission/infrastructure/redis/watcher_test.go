@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/aegiscore/common/runtime/redispubsub"
+	"github.com/aegiscore/platform/runtime/redispubsub"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 

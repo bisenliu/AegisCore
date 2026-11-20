@@ -12,7 +12,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	commonlogger "github.com/aegiscore/common/runtime/logger"
+	platformlogger "github.com/aegiscore/platform/runtime/logger"
 	"github.com/aegiscore/user-service/internal/bootstrap"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
@@ -92,7 +92,7 @@ func logConfigSource(loaded *serviceconfig.LoadResult) {
 		return
 	}
 	runtimeCfg := loaded.Config.RuntimeConfig()
-	log, err := commonlogger.New(&runtimeCfg)
+	log, err := platformlogger.New(&runtimeCfg)
 	if err != nil {
 		return
 	}
