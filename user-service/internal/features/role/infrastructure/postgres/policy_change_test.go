@@ -108,6 +108,70 @@ func TestPolicyFactFailuresRollbackBusinessMutation(t *testing.T) {
 	})
 }
 
+func TestUserRoleFactFailuresRollbackBusinessMutation(t *testing.T) {
+	ctx, _, client := newBootstrapPostgresTestDB(t)
+	roles := NewRoleStore(client)
+	userRoles := NewUserRoleStore(client)
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000021101")
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000021102")
+	createRoleForTest(ctx, t, roles, roleID, "User Role Rollback", true, false)
+	createUserForTest(ctx, t, client, userID, "rollback-user@example.com", false)
+
+	t.Run("revision insert failure rolls back binding", func(t *testing.T) {
+		_, err := userRoles.Add(ctx, userID, roleID, roleapplication.PolicyChange{
+			Kind:   roleapplication.PolicyChangeKindUserRoleChanged,
+			Reason: strings.Repeat("u", 65),
+			UserID: userID,
+			RoleID: roleID,
+		})
+		require.ErrorContains(t, err, "append rbac user-role revision")
+
+		count, err := client.UserRole.Query().Count(ctx)
+		require.NoError(t, err)
+		require.Zero(t, count)
+		revisionCount, err := client.RbacUserRoleRevision.Query().Count(ctx)
+		require.NoError(t, err)
+		require.Zero(t, revisionCount)
+	})
+
+	t.Run("missing counter initializes from latest user-role revision", func(t *testing.T) {
+		const latestRevision int64 = 17
+		_, err := client.RbacUserRoleRevision.Create().
+			SetID(latestRevision).
+			SetReason("existing_user_role").
+			SetUserID(userID).
+			Save(ctx)
+		require.NoError(t, err)
+
+		added, err := userRoles.Add(ctx, userID, roleID, userRolePolicyChange("user_role_added", userID, roleID))
+		require.NoError(t, err)
+		require.Equal(t, latestRevision+1, added.Revision)
+		counter, err := client.RbacUserRoleRevisionCounter.Get(ctx, userRoleRevisionCounterID)
+		require.NoError(t, err)
+		require.Equal(t, added.Revision, counter.LastRevision)
+		assertUserRoleFact(ctx, t, client, added.Revision, userRolePolicyChange("user_role_added", userID, roleID))
+	})
+
+	t.Run("commit cancellation rolls back replacement", func(t *testing.T) {
+		commitCtx, cancel := context.WithCancel(ctx)
+		client.RbacUserRoleRevision.Use(func(next ent.Mutator) ent.Mutator {
+			return ent.MutateFunc(func(ctx context.Context, mutation ent.Mutation) (ent.Value, error) {
+				value, err := next.Mutate(ctx, mutation)
+				if err == nil {
+					cancel()
+				}
+				return value, err
+			})
+		})
+
+		_, err := userRoles.Replace(commitCtx, userID, nil, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil()))
+		require.ErrorIs(t, err, context.Canceled)
+		count, err := client.UserRole.Query().Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+	})
+}
+
 func TestPolicyFactCommitFailureRollsBackAllWrites(t *testing.T) {
 	ctx, _, client := newBootstrapPostgresTestDB(t)
 	store := NewRoleStore(client)

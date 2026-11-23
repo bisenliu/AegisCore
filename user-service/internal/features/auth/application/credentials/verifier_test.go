@@ -97,6 +97,130 @@ func TestVerifierInvalidHashDoesNotRevealUserExistence(t *testing.T) {
 	}
 }
 
+func TestVerifierPasswordAndLookupBoundaries(t *testing.T) {
+	t.Run("query failure is not masked as invalid credentials", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		storeErr := errors.New("credential store unavailable")
+		store := NewMockUserCredentialStore(ctrl)
+		store.EXPECT().GetByUsername(gomock.Any(), "alice").Return(nil, storeErr)
+
+		_, err := NewVerifier(store, NewMockPasswordService(ctrl)).VerifyPassword(context.Background(), "alice", "secret")
+		require.ErrorIs(t, err, storeErr)
+		require.NotErrorIs(t, err, authdomain.ErrInvalidCredentials)
+	})
+
+	t.Run("password mismatch", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		store := NewMockUserCredentialStore(ctrl)
+		store.EXPECT().GetByUsername(gomock.Any(), "alice").Return(&authdomain.UserCredential{UserID: verifierTestUserID, Username: "alice", PasswordHash: "stored-hash", Status: identity.UserStatusNormal}, nil)
+		passwords := NewMockPasswordService(ctrl)
+		passwords.EXPECT().VerifyContext(gomock.Any(), "secret", "stored-hash").Return(false, nil)
+
+		_, err := NewVerifier(store, passwords).VerifyPassword(context.Background(), "alice", "secret")
+		require.ErrorIs(t, err, authdomain.ErrInvalidCredentials)
+	})
+
+	t.Run("normal user can login", func(t *testing.T) {
+		passwordHash, err := hashTestPassword(t, "secret")
+		require.NoError(t, err)
+		store := NewMockUserCredentialStore(gomock.NewController(t))
+		credential := &authdomain.UserCredential{UserID: verifierTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}
+		store.EXPECT().GetByUsername(gomock.Any(), "alice").Return(credential, nil)
+
+		got, err := NewVerifier(store, testPasswordService(t)).VerifyPassword(context.Background(), "alice", "secret")
+		require.NoError(t, err)
+		require.Equal(t, credential, got)
+	})
+
+	t.Run("disabled status stays joined with invalid credentials", func(t *testing.T) {
+		passwordHash, err := hashTestPassword(t, "secret")
+		require.NoError(t, err)
+		store := NewMockUserCredentialStore(gomock.NewController(t))
+		store.EXPECT().GetByUsername(gomock.Any(), "alice").Return(&authdomain.UserCredential{UserID: verifierTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled}, nil)
+
+		_, err = NewVerifier(store, testPasswordService(t)).VerifyPassword(context.Background(), "alice", "secret")
+		require.ErrorIs(t, err, authdomain.ErrInvalidCredentials)
+		require.ErrorIs(t, err, authdomain.ErrUserStatusRejected)
+	})
+}
+
+func TestVerifierForceChangePasswordBoundaries(t *testing.T) {
+	t.Run("missing user", func(t *testing.T) {
+		store := NewMockUserCredentialStore(gomock.NewController(t))
+		store.EXPECT().GetCredentialByUserID(gomock.Any(), verifierTestUserID).Return(nil, identity.ErrUserNotFound)
+
+		_, err := NewVerifier(store, testPasswordService(t)).ForceChangePassword(context.Background(), verifierTestUserID, 2, "new-secret")
+		require.ErrorIs(t, err, identity.ErrUserNotFound)
+	})
+
+	t.Run("query failure", func(t *testing.T) {
+		storeErr := errors.New("credential store unavailable")
+		store := NewMockUserCredentialStore(gomock.NewController(t))
+		store.EXPECT().GetCredentialByUserID(gomock.Any(), verifierTestUserID).Return(nil, storeErr)
+
+		_, err := NewVerifier(store, testPasswordService(t)).ForceChangePassword(context.Background(), verifierTestUserID, 2, "new-secret")
+		require.ErrorIs(t, err, storeErr)
+	})
+
+	t.Run("status no longer requires password change", func(t *testing.T) {
+		store := NewMockUserCredentialStore(gomock.NewController(t))
+		store.EXPECT().GetCredentialByUserID(gomock.Any(), verifierTestUserID).Return(&authdomain.UserCredential{UserID: verifierTestUserID, Status: identity.UserStatusNormal}, nil)
+
+		_, err := NewVerifier(store, testPasswordService(t)).ForceChangePassword(context.Background(), verifierTestUserID, 2, "new-secret")
+		require.ErrorIs(t, err, authdomain.ErrTokenInvalid)
+	})
+
+	t.Run("hash failure", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		hashErr := errors.New("hash unavailable")
+		store := NewMockUserCredentialStore(ctrl)
+		store.EXPECT().GetCredentialByUserID(gomock.Any(), verifierTestUserID).Return(&authdomain.UserCredential{UserID: verifierTestUserID, Status: identity.UserStatusMustChangePassword}, nil)
+		passwords := NewMockPasswordService(ctrl)
+		passwords.EXPECT().HashContext(gomock.Any(), "new-secret").Return("", hashErr)
+
+		_, err := NewVerifier(store, passwords).ForceChangePassword(context.Background(), verifierTestUserID, 2, "new-secret")
+		require.ErrorIs(t, err, hashErr)
+		require.ErrorContains(t, err, "hash changed password")
+	})
+
+	t.Run("update missing user", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		store := NewMockUserCredentialStore(ctrl)
+		store.EXPECT().GetCredentialByUserID(gomock.Any(), verifierTestUserID).Return(&authdomain.UserCredential{UserID: verifierTestUserID, Status: identity.UserStatusMustChangePassword}, nil)
+		store.EXPECT().UpdateCredentials(gomock.Any(), gomock.Any()).Return(int64(0), identity.ErrUserNotFound)
+		passwords := NewMockPasswordService(ctrl)
+		passwords.EXPECT().HashContext(gomock.Any(), "new-secret").Return("hashed", nil)
+
+		_, err := NewVerifier(store, passwords).ForceChangePassword(context.Background(), verifierTestUserID, 2, "new-secret")
+		require.ErrorIs(t, err, identity.ErrUserNotFound)
+	})
+
+	t.Run("update condition rejected", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		store := NewMockUserCredentialStore(ctrl)
+		store.EXPECT().GetCredentialByUserID(gomock.Any(), verifierTestUserID).Return(&authdomain.UserCredential{UserID: verifierTestUserID, Status: identity.UserStatusMustChangePassword}, nil)
+		store.EXPECT().UpdateCredentials(gomock.Any(), gomock.Any()).Return(int64(0), authdomain.ErrTokenInvalid)
+		passwords := NewMockPasswordService(ctrl)
+		passwords.EXPECT().HashContext(gomock.Any(), "new-secret").Return("hashed", nil)
+
+		_, err := NewVerifier(store, passwords).ForceChangePassword(context.Background(), verifierTestUserID, 2, "new-secret")
+		require.ErrorIs(t, err, authdomain.ErrTokenInvalid)
+	})
+
+	t.Run("update failure", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		updateErr := errors.New("update unavailable")
+		store := NewMockUserCredentialStore(ctrl)
+		store.EXPECT().GetCredentialByUserID(gomock.Any(), verifierTestUserID).Return(&authdomain.UserCredential{UserID: verifierTestUserID, Status: identity.UserStatusMustChangePassword}, nil)
+		store.EXPECT().UpdateCredentials(gomock.Any(), gomock.Any()).Return(int64(0), updateErr)
+		passwords := NewMockPasswordService(ctrl)
+		passwords.EXPECT().HashContext(gomock.Any(), "new-secret").Return("hashed", nil)
+
+		_, err := NewVerifier(store, passwords).ForceChangePassword(context.Background(), verifierTestUserID, 2, "new-secret")
+		require.ErrorIs(t, err, updateErr)
+	})
+}
+
 func TestVerifierForceChangePasswordUpdatesCredentials(t *testing.T) {
 	oldHash, err := hashTestPassword(t, "old-secret")
 	require.NoError(t, err,
