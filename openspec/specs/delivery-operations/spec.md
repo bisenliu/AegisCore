@@ -78,7 +78,7 @@ Ent schema MUST 是数据库结构来源，Atlas SQL migration MUST 是可审查
 
 ### Requirement: 镜像、部署与受控发布
 
-user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go module 解析和分离缓存构建，并以最小非 root 运行时交付同一可验证工件。CI MUST 运行覆盖 platform 与 user-service 的真实依赖测试。Docker、Compose、Helm 渲染的 Kubernetes 清单和观测资产 MUST 使用一致的 runtime config、release 工件、安全上下文、探针、Secret、资源和网络边界，MUST NOT 包含真实 secret 或自动 migration apply。仓库 MUST NOT 再维护与 Helm chart 平行的手写 Kubernetes YAML。外部服务标识与镜像名 MUST 使用 `aegiscore-user-service`，容器、二进制和本地目录语义 MUST 使用 `user-service`，MUST NOT 保留旧复数命名。
+user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go module 解析和分离缓存构建，并以最小非 root 运行时交付同一可验证工件。镜像构建上下文 MUST 放行 `go.work` 已登记的全部一方模块 `go.mod`，Dockerfile 的依赖层 MUST 在复制业务源码前复制这些 `go.mod`，使只读 workspace 解析可以成功。CI MUST 运行覆盖 platform 与 user-service 的真实依赖测试。Docker、Compose、Helm 渲染的 Kubernetes 清单和观测资产 MUST 使用一致的 runtime config、release 工件、安全上下文、探针、Secret、资源和网络边界，MUST NOT 包含真实 secret 或自动 migration apply。仓库 MUST NOT 再维护与 Helm chart 平行的手写 Kubernetes YAML。外部服务标识与镜像名 MUST 使用 `aegiscore-user-service`，容器、二进制和本地目录语义 MUST 使用 `user-service`，MUST NOT 保留旧复数命名。
 
 #### Scenario: 发布顺序与兼容边界
 
@@ -93,6 +93,13 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 - **THEN** 系统 MUST 只支持全新数据库路径，MUST NOT 支持旧库原地升级、旧管理员识别、bootstrap marker 回填、旧命令别名、双版本 CLI 或自动恢复已有管理员，也 MUST NOT 新增 Ent schema、业务表或 Atlas migration
 - **WHEN** 普通运行时容器启动
 - **THEN** 容器 MUST 直接执行服务或显式 CLI，`RUN_MIGRATIONS=true` MUST NOT 触发 Atlas migration
+
+#### Scenario: workspace 模块清单进入镜像依赖层
+
+- **WHEN** CI 或发布流水线使用仓库根目录构建 user-service 镜像
+- **THEN** 构建上下文 MUST 包含 `go.work` 已登记的全部一方模块 `go.mod`
+- **AND** Dockerfile MUST 在执行只读 workspace 解析前复制这些 `go.mod`
+- **AND** 任一已登记模块的 `go.mod` 缺失时，镜像构建 MUST 失败，MUST NOT 忽略该错误后继续编译
 
 ### Requirement: Compose 本地编排与时区一致性
 
@@ -400,6 +407,7 @@ user-service Helm 生产发布 MUST 使用不可变镜像引用。Deployment、R
 - **THEN** 系统 MUST 在仓库根目录生成 `order-service` 标准服务目录结构、Cobra 入口、Fx bootstrap、HTTP runtime、配置结构、Gin 路由、服务级 Makefile 与 README.md
 - **AND** 系统 MUST 在 `deployments/nacos/local-host/` 和 `deployments/nacos/local-docker/` 生成对应的 Nacos 配置模板
 - **AND** 系统 MUST 在 `deployments/docker/` 生成对应的多阶段构建 Dockerfile
+- **AND** 生成的 Dockerfile MUST 在只读 workspace 解析前复制当前 `go.work` 已登记的全部一方模块 `go.mod`，并在模块清单缺失时失败
 - **AND** 系统 MUST 自动将 `./order-service` 追加到根目录 `go.work` 的 `use` 清单中（若尚未登记）
 - **AND** 生成的新服务模块 MUST 可直接通过 `go build ./...` 与 `go test ./...` 校验
 

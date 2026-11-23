@@ -761,10 +761,13 @@ WORKDIR /src
 
 COPY go.work go.work.sum ./
 COPY platform/go.mod platform/go.sum ./platform/
+COPY tools/nacos-config-seed/go.mod ./tools/nacos-config-seed/
+COPY tools/openapi-convert/go.mod ./tools/openapi-convert/
+COPY tools/service-scaffold/go.mod ./tools/service-scaffold/
 COPY {{.ServiceName}}/go.mod {{.ServiceName}}/go.sum* ./{{.ServiceName}}/
 
 RUN --mount=type=cache,target=/go/pkg/mod \
-  go list -m -mod=readonly all >/dev/null || true
+  go list -m -mod=readonly all >/dev/null
 
 COPY platform ./platform
 COPY {{.ServiceName}} ./{{.ServiceName}}

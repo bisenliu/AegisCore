@@ -1,7 +1,8 @@
 # Docker 构建上下文
 *
 
-# deployments/docker/user-service.Dockerfile 所需的 workspace 文件
+# deployments/docker/user-service.Dockerfile 所需的 workspace 文件。
+# go.work 会校验全部已登记模块，因此每个模块至少要放行 go.mod。
 !go.work
 !go.work.sum
 !platform/
@@ -11,6 +12,8 @@
 !tools/nacos-config-seed/**
 !tools/openapi-convert/
 !tools/openapi-convert/go.mod
+!tools/service-scaffold/
+!tools/service-scaffold/go.mod
 !user-service/
 !user-service/**
 

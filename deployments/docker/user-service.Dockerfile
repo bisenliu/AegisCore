@@ -11,6 +11,7 @@ COPY go.work go.work.sum ./
 COPY platform/go.mod platform/go.sum ./platform/
 COPY tools/nacos-config-seed/go.mod ./tools/nacos-config-seed/
 COPY tools/openapi-convert/go.mod ./tools/openapi-convert/
+COPY tools/service-scaffold/go.mod ./tools/service-scaffold/
 COPY user-service/go.mod user-service/go.sum ./user-service/
 
 RUN --mount=type=cache,target=/go/pkg/mod \

@@ -171,6 +171,27 @@ use (
 		t.Fatalf("go.mod missing expected module path: %s", string(goModBytes))
 	}
 
+	// 生成的 Dockerfile 必须带上当前 workspace 的全部模块清单，
+	// 否则 go.work 校验会因为找不到 go.mod 而失败。
+	dockerfileBytes, err := os.ReadFile(filepath.Join(tempDir, "deployments/docker/order-service.Dockerfile"))
+	if err != nil {
+		t.Fatalf("read generated Dockerfile: %v", err)
+	}
+	dockerfile := string(dockerfileBytes)
+	for _, required := range []string{
+		"COPY tools/nacos-config-seed/go.mod ./tools/nacos-config-seed/",
+		"COPY tools/openapi-convert/go.mod ./tools/openapi-convert/",
+		"COPY tools/service-scaffold/go.mod ./tools/service-scaffold/",
+		"go list -m -mod=readonly all >/dev/null\n",
+	} {
+		if !strings.Contains(dockerfile, required) {
+			t.Fatalf("generated Dockerfile missing %q:\n%s", required, dockerfile)
+		}
+	}
+	if strings.Contains(dockerfile, "go list -m -mod=readonly all >/dev/null || true") {
+		t.Fatalf("generated Dockerfile must not ignore workspace module resolution failure")
+	}
+
 	// 验证 Nacos 配置端口
 	nacosBytes, err := os.ReadFile(filepath.Join(tempDir, "deployments/nacos/local-host/order-service.yaml"))
 	if err != nil {
