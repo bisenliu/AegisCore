@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -46,7 +47,7 @@ func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 	flags.StringVar(&options.Namespace, "namespace", envOrDefault("AEGISCORE_NACOS_NAMESPACE", "loca"), "Nacos namespace ID")
 	flags.StringVar(&options.Group, "group", envOrDefault("AEGISCORE_NACOS_GROUP", "AEGISCORE"), "Nacos config group")
 	flags.StringVar(&options.ConfigDir, "config-dir", "/nacos/init", "directory containing YAML documents")
-	flags.StringVar(&dataIDsCSV, "data-ids", defaultDataIDs(), "comma-separated Nacos data IDs")
+	flags.StringVar(&dataIDsCSV, "data-ids", "", "comma-separated Nacos data IDs (defaults to auto-discovering all yaml in config-dir)")
 	flags.StringVar(&timeoutText, "timeout", envOrDefault("AEGISCORE_NACOS_TIMEOUT", "10s"), "overall request timeout")
 	flags.StringVar(&options.Username, "username", strings.TrimSpace(os.Getenv("AEGISCORE_NACOS_USERNAME")), "Nacos username")
 	flags.StringVar(&options.Password, "password", secretEnv("AEGISCORE_NACOS_PASSWORD"), "Nacos password")
@@ -60,7 +61,11 @@ func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 		failf(stderr, "timeout must be a positive duration")
 		return exitError
 	}
-	options.DataIDs, err = parseDataIDs(dataIDsCSV)
+	if strings.TrimSpace(dataIDsCSV) != "" {
+		options.DataIDs, err = parseDataIDs(dataIDsCSV)
+	} else {
+		options.DataIDs, err = discoverDataIDs(options.ConfigDir)
+	}
 	if err != nil {
 		failf(stderr, "%v", err)
 		return exitError
@@ -105,6 +110,55 @@ func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 		return exitError
 	}
 	return exitOK
+}
+
+// discoverDataIDs 扫描配置目录下全部 YAML 文件并排序（base.yaml 与 resources.yaml 优先置顶）。
+func discoverDataIDs(configDir string) ([]string, error) {
+	entries, err := os.ReadDir(configDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return parseDataIDs(defaultDataIDs())
+		}
+		return nil, fmt.Errorf("read config-dir %s: %w", configDir, err)
+	}
+
+	var hasBase, hasResources bool
+	var others []string
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue
+		}
+		switch name {
+		case "base.yaml":
+			hasBase = true
+		case "resources.yaml":
+			hasResources = true
+		default:
+			others = append(others, name)
+		}
+	}
+
+	sort.Strings(others)
+
+	dataIDs := make([]string, 0, len(others)+2)
+	if hasBase {
+		dataIDs = append(dataIDs, "base.yaml")
+	}
+	if hasResources {
+		dataIDs = append(dataIDs, "resources.yaml")
+	}
+	dataIDs = append(dataIDs, others...)
+
+	if len(dataIDs) == 0 {
+		return parseDataIDs(defaultDataIDs())
+	}
+
+	return dataIDs, nil
 }
 
 // defaultDataIDs 返回未手动指定配置文件时系统默认要推送的文件列表（如 base.yaml、resources.yaml）。

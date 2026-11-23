@@ -213,6 +213,39 @@ func TestRunPreloadsAllDocumentsBeforeNetwork(t *testing.T) {
 	}
 }
 
+func TestRunAutoDiscoversAllDocuments(t *testing.T) {
+	dir := t.TempDir()
+	for _, file := range []string{"resources.yaml", "order-service.yaml", "base.yaml", "user-service.yaml"} {
+		if err := os.WriteFile(filepath.Join(dir, file), []byte("content: "+file+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/nacos/v3/admin/core/namespace/check" {
+			writeResponse(t, w, `{"code":0,"message":"success","data":1}`)
+			return
+		}
+		writeResponse(t, w, `{"code":0,"message":"success","data":true}`)
+	}))
+	defer server.Close()
+
+	var stdout, stderr bytes.Buffer
+	code := run(context.Background(), []string{
+		"-addr", server.URL,
+		"-config-dir", dir,
+	}, &stdout, &stderr)
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %s", code, stderr.String())
+	}
+
+	expected := "data_ids=base.yaml,resources.yaml,order-service.yaml,user-service.yaml\n"
+	if !strings.Contains(stdout.String(), expected) {
+		t.Fatalf("stdout %q does not contain %q", stdout.String(), expected)
+	}
+}
+
 func writeConfigDocuments(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

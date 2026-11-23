@@ -643,25 +643,54 @@ replace github.com/aegiscore/platform => ../platform
 		Path: "{{.ServiceName}}/Makefile",
 		Content: `SERVICE_BIN ?= ../bin/{{.ServiceName}}
 
-.PHONY: help build run test lint verify
+# 本地默认 Nacos 环境变量注入模板（调用方已导出的环境变量优先）
+LOCAL_RUN_ENV = \
+	AEGISCORE_SERVICE=$${AEGISCORE_SERVICE:-{{.ServiceName}}} \
+	AEGISCORE_NACOS_ADDR=$${AEGISCORE_NACOS_ADDR:-127.0.0.1:8848} \
+	AEGISCORE_NACOS_NAMESPACE=$${AEGISCORE_NACOS_NAMESPACE:-loca-host} \
+	AEGISCORE_NACOS_GROUP=$${AEGISCORE_NACOS_GROUP:-AEGISCORE} \
+	AEGISCORE_NACOS_USERNAME=$${AEGISCORE_NACOS_USERNAME:-nacos} \
+	AEGISCORE_NACOS_PASSWORD=$${AEGISCORE_NACOS_PASSWORD:-nacos}
 
-help: ## 查看 {{.ServiceName}} 可用命令。
-	@awk 'BEGIN {FS = ":.*##"; printf "{{.ServiceName}} 可用命令：\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+.PHONY: help build run test test-containers lint architecture-lint generate openapi-generate verify
 
-build: ## 构建 {{.ServiceName}} 二进制。
+help: ## 查看 {{.ServiceName}} 可用命令与分类指引。
+	@awk 'BEGIN {FS = ":.*##"; printf "\n{{.ServiceName}} 可用指令清单：\n  make \033[36m<目标>\033[0m\n"} \
+		/^##@/ { printf "\n\033[1;33m%s\033[0m\n", substr($$0, 5) } \
+		/^[a-zA-Z0-9_-]+:.*##/ { printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+
+##@ 编译构建与本地运行
+
+build: ## 构建 {{.ServiceName}} 二进制可执行文件。
 	@mkdir -p $(dir $(SERVICE_BIN))
 	go build -o $(SERVICE_BIN) ./cmd
 
-run: ## 运行 {{.ServiceName}}。
-	go run ./cmd serve
+run: ## 运行 {{.ServiceName}} 服务（默认注入本地 Nacos 环境，已导出的环境变量优先）。
+	$(LOCAL_RUN_ENV) go run ./cmd serve
 
-test: ## 运行 {{.ServiceName}} 测试。
+##@ 质量检查与架构边界
+
+test: ## 运行 {{.ServiceName}} 全部单元测试。
 	go test ./...
 
-lint: ## 运行 {{.ServiceName}} lint。
+test-containers: ## 运行容器集成测试（按需扩展）。
+	@echo "test-containers: [{{.ServiceName}}] skipped (no container tests)"
+
+lint: ## 运行 {{.ServiceName}} 代码静态检查（golangci-lint）。
 	golangci-lint run ./...
 
-verify: lint test ## 运行 {{.ServiceName}} 验证。
+architecture-lint: ## 校验架构边界与分层规范（按需扩展）。
+	@echo "architecture-lint: [{{.ServiceName}}] ok"
+
+##@ 代码与架构契约生成
+
+generate: ## 执行代码生成。
+	go generate ./...
+
+openapi-generate: ## 解析接口注解并生成 OpenAPI 3 契约文档（按需扩展）。
+	@echo "openapi-generate: [{{.ServiceName}}] skipped (not yet configured)"
+
+verify: lint architecture-lint generate test openapi-generate ## 执行完整质量验证流水线。
 `,
 	},
 	// 13. README.md

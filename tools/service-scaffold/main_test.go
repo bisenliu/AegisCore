@@ -118,6 +118,14 @@ use (
 		t.Fatalf("failed to write fixture go.work: %v", err)
 	}
 
+	// 在临时目录构造初始 Makefile 文件
+	initialMakefile := `BUSINESS_SERVICES := user-service
+`
+	makefilePath := filepath.Join(tempDir, "Makefile")
+	if err := os.WriteFile(makefilePath, []byte(initialMakefile), 0644); err != nil {
+		t.Fatalf("failed to write fixture Makefile: %v", err)
+	}
+
 	var stdout, stderr bytes.Buffer
 	code := run([]string{
 		"-name", "order-service",
@@ -208,6 +216,15 @@ use (
 	}
 	if !strings.Contains(string(updatedGoWorkBytes), "\t./order-service\n") {
 		t.Fatalf("go.work missing registered module: %s", string(updatedGoWorkBytes))
+	}
+
+	// 验证 Makefile BUSINESS_SERVICES 注册
+	updatedMakefileBytes, err := os.ReadFile(makefilePath)
+	if err != nil {
+		t.Fatalf("read updated Makefile: %v", err)
+	}
+	if !strings.Contains(string(updatedMakefileBytes), "BUSINESS_SERVICES := user-service order-service") {
+		t.Fatalf("Makefile missing registered service: %s", string(updatedMakefileBytes))
 	}
 }
 

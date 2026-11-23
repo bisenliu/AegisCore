@@ -134,6 +134,11 @@ func GenerateService(opts ScaffoldOptions, stdout io.Writer) error {
 		return fmt.Errorf("update go.work: %w", err)
 	}
 
+	// 第三阶段：更新根目录 Makefile 的 BUSINESS_SERVICES
+	if err := updateRootMakefile(opts, stdout); err != nil {
+		return fmt.Errorf("update Makefile BUSINESS_SERVICES: %w", err)
+	}
+
 	return nil
 }
 
@@ -222,5 +227,55 @@ func updateGoWork(opts ScaffoldOptions, stdout io.Writer) error {
 	}
 
 	_, _ = fmt.Fprintf(stdout, "registered %s in go.work\n", entry)
+	return nil
+}
+
+// updateRootMakefile 确保新服务模块被登记到仓库根目录 Makefile 的 BUSINESS_SERVICES 变量中。
+func updateRootMakefile(opts ScaffoldOptions, stdout io.Writer) error {
+	makefilePath := filepath.Join(opts.RepoRoot, "Makefile")
+	contentBytes, err := os.ReadFile(makefilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// 如果不存在 Makefile 则跳过追加
+			return nil
+		}
+		return err
+	}
+
+	content := string(contentBytes)
+	re := regexp.MustCompile(`(?m)^(BUSINESS_SERVICES\s*:?=\s*)(.*)$`)
+	loc := re.FindStringSubmatchIndex(content)
+	if loc == nil {
+		return nil
+	}
+
+	currentList := strings.TrimSpace(content[loc[4]:loc[5]])
+	services := strings.Fields(currentList)
+	for _, s := range services {
+		if s == opts.ServiceName {
+			_, _ = fmt.Fprintf(stdout, "service %s already registered in root Makefile BUSINESS_SERVICES\n", opts.ServiceName)
+			return nil
+		}
+	}
+
+	if opts.DryRun {
+		_, _ = fmt.Fprintf(stdout, "[dry-run] will update root Makefile: add %s to BUSINESS_SERVICES\n", opts.ServiceName)
+		return nil
+	}
+
+	prefix := content[loc[2]:loc[3]]
+	var newLine string
+	if currentList == "" {
+		newLine = fmt.Sprintf("%s%s", prefix, opts.ServiceName)
+	} else {
+		newLine = fmt.Sprintf("%s%s %s", prefix, currentList, opts.ServiceName)
+	}
+	newContent := content[:loc[0]] + newLine + content[loc[1]:]
+
+	if err := os.WriteFile(makefilePath, []byte(newContent), 0644); err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(stdout, "registered %s in root Makefile BUSINESS_SERVICES\n", opts.ServiceName)
 	return nil
 }
