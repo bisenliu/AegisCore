@@ -25,7 +25,7 @@
 
 ### Requirement: 质量门禁、架构诊断与可复现生成
 
-系统 MUST 提供模块级和仓库级测试、lint、架构检查、生成和完整 verify 入口。测试与生成 MUST 可诊断、可复现且不得扩张正式生产 API。`platform`、`user-service`、`tools/openapi-convert` 和 `tools/nacos-config-seed` 四个 Go module MUST 进入仓库级 lint、`govulncheck` 和 `gosec` 门禁，并在完整仓库 checkout 中保持可独立校验的 module metadata。`user-service-architecture-lint` MUST 保护正式架构来源声明的边界；Fx 依赖图诊断 MUST 无外部及运行时激活副作用。OpenAPI 转换库、CLI 和服务脚本 MUST 分别由 `platform/http/openapi`、`tools/openapi-convert` 和 user-service 拥有其通用逻辑、可执行入口与服务参数。GitHub Actions MUST 由主 CI workflow 唯一拥有 PR 与主线 push 的标准质量触发，并通过仅支持 `workflow_call` 的复用 workflow 为同一 commit 各执行一次 lint 和普通单测。
+系统 MUST 提供模块级和仓库级测试、lint、架构检查、生成和完整 verify 入口。测试与生成 MUST 可诊断、可复现且不得扩张正式生产 API。`platform`、`user-service`、`tools/openapi-convert`、`tools/nacos-config-seed` 和 `tools/service-scaffold` 五个 Go module MUST 进入仓库级 lint、`govulncheck` 和 `gosec` 门禁，并在完整仓库 checkout 中保持可独立校验的 module metadata。`user-service-architecture-lint` MUST 保护正式架构来源声明的边界；Fx 依赖图诊断 MUST 无外部及运行时激活副作用。OpenAPI 转换库、CLI 和服务脚本 MUST 分别由 `platform/http/openapi`、`tools/openapi-convert` 和 user-service 拥有其通用逻辑、可执行入口与服务参数。GitHub Actions MUST 由主 CI workflow 唯一拥有 PR 与主线 push 的标准质量触发，并通过仅支持 `workflow_call` 的复用 workflow 为同一 commit 各执行一次 lint 和普通单测。
 
 #### Scenario: Nacos source adapter 测试与示例门禁
 
@@ -362,7 +362,6 @@ user-service Helm 生产发布 MUST 使用不可变镜像引用。Deployment、R
 - **WHEN** 使用 `--drop-git`
 - **THEN** 工具按未知参数拒绝执行且不修改文件
 
-
 #### Scenario: 更名成功后自动清理模板元数据
 
 - **WHEN** apply 更名和代码生成成功
@@ -391,3 +390,24 @@ user-service Helm 生产发布 MUST 使用不可变镜像引用。Deployment、R
 
 - **WHEN** workflow 使用未固定 commit SHA 的外部 Action
 - **THEN** Actions 固定版本检查 MUST 返回失败
+
+### Requirement: 业务服务脚手架与多服务自动化扩展
+
+系统 MUST 在 `tools/service-scaffold` 提供轻量级服务生成 CLI，并在根 `Makefile` 提供 `new-service` 入口，支持在仓库根目录下生成与 `user-service` 平级的标准业务服务骨架。生成的服务 MUST 包含完整的 Cobra 入口、Fx 依赖注入装配、配置加载与脱敏、HTTP 服务生命周期管理、健康检查探针、独立 `go.mod`、服务级 `Makefile`、Nacos 本地配置文件模板及多阶段 Dockerfile，并自动注册到 `go.work`。
+
+#### Scenario: 成功生成新业务服务骨架
+- **WHEN** 开发者执行 `make new-service name=order-service` 或调用 `tools/service-scaffold` 传入合法的服务名称
+- **THEN** 系统 MUST 在仓库根目录生成 `order-service` 标准服务目录结构、Cobra 入口、Fx bootstrap、HTTP runtime、配置结构、Gin 路由、服务级 Makefile 与 README.md
+- **AND** 系统 MUST 在 `deployments/nacos/local-host/` 和 `deployments/nacos/local-docker/` 生成对应的 Nacos 配置模板
+- **AND** 系统 MUST 在 `deployments/docker/` 生成对应的多阶段构建 Dockerfile
+- **AND** 系统 MUST 自动将 `./order-service` 追加到根目录 `go.work` 的 `use` 清单中（若尚未登记）
+- **AND** 生成的新服务模块 MUST 可直接通过 `go build ./...` 与 `go test ./...` 校验
+
+#### Scenario: 服务命名合法性与冲突校验拦截
+- **WHEN** 开发者执行 `make new-service` 未指定服务名称，或传入包含大写字母、非法字符、保留字（如 `platform`、`tools`、`deployments`、`internal`）或已存在的目录名称且未指定 `-force`
+- **THEN** 系统 MUST 立即报错并输出明确的错误提示与参数用法，MUST NOT 创建或修改任何文件
+
+#### Scenario: Dry-run 预览生成资产
+- **WHEN** 开发者调用 `tools/service-scaffold` 时携带 `-dry-run` 标志
+- **THEN** 系统 MUST 仅打印将要生成的目录、文件路径与注册动作，MUST NOT 向磁盘写入任何文件或修改 `go.work`
+

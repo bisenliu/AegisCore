@@ -1,6 +1,7 @@
 PLATFORM_DIR := platform
 TOOLS_OPENAPI_CONVERT_DIR := tools/openapi-convert
 TOOLS_NACOS_CONFIG_SEED_DIR := tools/nacos-config-seed
+TOOLS_SERVICE_SCAFFOLD_DIR := tools/service-scaffold
 # 根目录业务服务清单。新增服务时追加目录名，并同步登记 go.work。
 BUSINESS_SERVICES := user-service
 USER_SERVICE_DIR := user-service
@@ -25,7 +26,7 @@ export ADMIN_BOOTSTRAP_PASSWORD
 
 .PHONY: help build test test-containers coverage lint verify
 .PHONY: platform-test platform-test-containers platform-lint platform-generate platform-verify
-.PHONY: tools-openapi-convert-test tools-openapi-convert-lint tools-nacos-config-seed-test tools-nacos-config-seed-lint tools-nacos-config-seed-local-host tools-nacos-config-seed-local-docker
+.PHONY: tools-openapi-convert-test tools-openapi-convert-lint tools-nacos-config-seed-test tools-nacos-config-seed-lint tools-nacos-config-seed-local-host tools-nacos-config-seed-local-docker tools-service-scaffold-test tools-service-scaffold-lint new-service
 .PHONY: user-service-build user-service-run user-service-test user-service-test-containers user-service-rbac-sync-race-test user-service-lint user-service-verify user-service-architecture-lint
 .PHONY: user-service-seed-rbac user-service-bootstrap-super-admin user-service-image-verify
 .PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-openapi-generate user-service-fxgraph-generate user-service-fxgraph-check
@@ -36,14 +37,14 @@ help: ## 查看可用命令。
 
 build: $(addsuffix -build,$(BUSINESS_SERVICES)) ## 构建全部已登记业务服务二进制。
 
-test: platform-test $(addsuffix -test,$(BUSINESS_SERVICES)) tools-openapi-convert-test tools-nacos-config-seed-test ## 运行全部 Go 模块测试。
+test: platform-test $(addsuffix -test,$(BUSINESS_SERVICES)) tools-openapi-convert-test tools-nacos-config-seed-test tools-service-scaffold-test ## 运行全部 Go 模块测试。
 
 test-containers: platform-test-containers $(addsuffix -test-containers,$(BUSINESS_SERVICES)) ## 运行 platform 与已登记业务服务的全部 Docker-backed 测试。
 
 coverage: ## 生成覆盖率报告并检查手写关键包基线。
 	./scripts/check-coverage.sh
 
-lint: platform-lint $(addsuffix -lint,$(BUSINESS_SERVICES)) tools-openapi-convert-lint tools-nacos-config-seed-lint ## 运行全部 Go 模块 lint。
+lint: platform-lint $(addsuffix -lint,$(BUSINESS_SERVICES)) tools-openapi-convert-lint tools-nacos-config-seed-lint tools-service-scaffold-lint ## 运行全部 Go 模块 lint。
 
 verify: lint $(addsuffix -architecture-lint,$(BUSINESS_SERVICES)) github-actions-pins-check delivery-verify platform-generate $(addsuffix -generate,$(BUSINESS_SERVICES)) test $(addsuffix -openapi-generate,$(BUSINESS_SERVICES)) ## 运行完整本地验证。
 	@if [ -e .git ]; then git diff --exit-code -- . ':(exclude)AGENTS.md' ':(exclude)openspec/AGENTS.md' ':(exclude)CLAUDE.md' ':(exclude).multica/project/resources.json' ':(exclude).multica/**'; \
@@ -94,6 +95,31 @@ tools-nacos-config-seed-local-docker: ## 发布 Compose 容器使用的本地 Na
 		-group '$(NACOS_GROUP)' \
 		-config-dir deployments/nacos/local-docker \
 		-timeout '$(NACOS_TIMEOUT)'
+
+tools-service-scaffold-test: ## 运行服务脚手架工具测试。
+	$(MAKE) -C $(TOOLS_SERVICE_SCAFFOLD_DIR) test
+
+tools-service-scaffold-lint: ## 运行服务脚手架工具 lint。
+	$(MAKE) -C $(TOOLS_SERVICE_SCAFFOLD_DIR) lint
+
+new-service: ## 使用脚手架生成新业务服务骨架，用法：make new-service name=<service-name> [port=<port>]
+	@test -n "$(name)" || (echo "用法：make new-service name=<service-name> [port=<port>]" >&2; exit 2)
+	go run ./$(TOOLS_SERVICE_SCAFFOLD_DIR) -name '$(name)' $(if $(port),-port '$(port)',)
+
+%-build:
+	$(MAKE) -C $* build
+
+%-run:
+	$(LOCAL_NACOS_ENV) AEGISCORE_SERVICE=$* $(MAKE) -C $* run
+
+%-test:
+	$(MAKE) -C $* test
+
+%-lint:
+	$(MAKE) -C $* lint
+
+%-verify:
+	$(MAKE) -C $* verify
 
 user-service-build: ## 构建 user-service 二进制。
 	$(MAKE) -C $(USER_SERVICE_DIR) build USER_SERVICE_BIN='$(USER_SERVICE_BIN)'

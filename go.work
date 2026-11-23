@@ -6,5 +6,6 @@ use (
 	./platform
 	./tools/nacos-config-seed
 	./tools/openapi-convert
+	./tools/service-scaffold
 	./user-service
 )

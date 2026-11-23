@@ -159,18 +159,22 @@ check_go_toolchain_version() {
   done < <(
     printf 'go.work go\t%s\n' "$(go_mod_version "${repo_root}/go.work")"
     printf 'go.work toolchain\t%s\n' "$(toolchain_version "${repo_root}/go.work")"
-    for mod in platform/go.mod user-service/go.mod tools/openapi-convert/go.mod tools/nacos-config-seed/go.mod; do
-      printf '%s go\t%s\n' "${mod}" "$(go_mod_version "${repo_root}/${mod}")"
+    for mod in platform/go.mod user-service/go.mod tools/openapi-convert/go.mod tools/nacos-config-seed/go.mod tools/service-scaffold/go.mod; do
+      if [[ -f "${repo_root}/${mod}" ]]; then
+        printf '%s go\t%s\n' "${mod}" "$(go_mod_version "${repo_root}/${mod}")"
+      fi
     done
     if [[ -f "${repo_root}/.github/actions/setup-go/action.yml" ]]; then
       printf '.github/actions/setup-go/action.yml go-version\t%s\n' "$(workflow_go_version "${repo_root}/.github/actions/setup-go/action.yml")"
     fi
   )
 
-  for mod in platform/go.mod user-service/go.mod tools/openapi-convert/go.mod tools/nacos-config-seed/go.mod; do
-    version="$(toolchain_version "${repo_root}/${mod}")"
-    if [[ -n "${version}" && "${version}" != "${expected}" ]]; then
-      report "${mod} toolchain has Go version ${version}; expected ${expected}"
+  for mod in platform/go.mod user-service/go.mod tools/openapi-convert/go.mod tools/nacos-config-seed/go.mod tools/service-scaffold/go.mod; do
+    if [[ -f "${repo_root}/${mod}" ]]; then
+      version="$(toolchain_version "${repo_root}/${mod}")"
+      if [[ -n "${version}" && "${version}" != "${expected}" ]]; then
+        report "${mod} toolchain has Go version ${version}; expected ${expected}"
+      fi
     fi
   done
 }
