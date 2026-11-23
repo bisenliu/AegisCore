@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/platform/runtime/logger"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
@@ -37,17 +38,29 @@ type loginUseCase struct {
 	credentials authcredentials.Verifier
 	tokens      authtokens.Issuer
 	sessions    authsessions.Lifecycle
+	lockout     *loginLockoutGuard
 	metrics     authapplication.Metrics
 }
 
 // NewLoginUseCase 构造登录 use case。
-func NewLoginUseCase(credentials authcredentials.Verifier, tokens authtokens.Issuer, sessions authsessions.Lifecycle, metrics authapplication.Metrics) LoginUseCase {
+// 启用登录锁定时必须提供可用的失败计数存储；缺失时拒绝装配，避免静默失去账号保护。
+func NewLoginUseCase(credentials authcredentials.Verifier, tokens authtokens.Issuer, sessions authsessions.Lifecycle, lockout authapplication.LoginLockoutStore, policy serviceconfig.LoginLockoutConfig, metrics authapplication.Metrics) (LoginUseCase, error) {
+	guard, err := newLoginLockoutGuard(lockout, LoginLockoutPolicy{
+		Enabled:       policy.Enabled,
+		MaxFailures:   policy.MaxFailures,
+		FailureWindow: policy.FailureWindow,
+		LockoutTTL:    policy.LockoutTTL,
+	})
+	if err != nil {
+		return nil, err
+	}
 	return &loginUseCase{
 		credentials: credentials,
 		tokens:      tokens,
 		sessions:    sessions,
+		lockout:     guard,
 		metrics:     metricsOrNop(metrics),
-	}
+	}, nil
 }
 
 // Login 校验凭证，并签发普通 token 或受限改密 token。
@@ -57,8 +70,20 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*LoginResul
 		return nil, err
 	}
 
+	// 前置检查账号锁定状态：若已被锁定直接拒绝，避免攻击者针对锁定账号消耗服务端数据库与 CPU 密码哈希算力。
+	if err := u.lockout.rejectIfLocked(ctx, cmd.Username); err != nil {
+		u.metrics.LoginFailed(ctx, loginFailureReason(err))
+		return nil, err
+	}
+
+	// 核对密码凭证，核对失败时记录失败次数并在达到阈值时触发账号锁定。
 	user, err := u.credentials.VerifyPassword(ctx, cmd.Username, cmd.Password)
 	if err != nil {
+		err = u.lockout.recordCredentialFailure(ctx, cmd.Username, err)
+		u.metrics.LoginFailed(ctx, loginFailureReason(err))
+		return nil, err
+	}
+	if err := u.lockout.clearOnSuccess(ctx, cmd.Username); err != nil {
 		u.metrics.LoginFailed(ctx, loginFailureReason(err))
 		return nil, err
 	}
@@ -122,6 +147,10 @@ func loginFailureReason(err error) string {
 	switch {
 	case errors.Is(err, authdomain.ErrUserStatusRejected):
 		return authapplication.MetricsReasonUserStatusRejected
+	case errors.Is(err, authdomain.ErrLoginLocked):
+		return authapplication.MetricsReasonLoginLocked
+	case errors.Is(err, authdomain.ErrLoginLockoutUnavailable):
+		return authapplication.MetricsReasonLoginLockoutUnavailable
 	case errors.Is(err, authdomain.ErrInvalidCredentials):
 		return authapplication.MetricsReasonCredentialInvalid
 	default:

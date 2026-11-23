@@ -204,6 +204,8 @@ func authReason(reason string) string {
 	case authapplication.MetricsReasonNone,
 		authapplication.MetricsReasonValidationFailed,
 		authapplication.MetricsReasonCredentialInvalid,
+		authapplication.MetricsReasonLoginLocked,
+		authapplication.MetricsReasonLoginLockoutUnavailable,
 		authapplication.MetricsReasonUserStatusRejected,
 		authapplication.MetricsReasonPasswordChangeRequiredIssueFailed,
 		authapplication.MetricsReasonTokenIssueFailed,
@@ -216,6 +218,8 @@ func authReason(reason string) string {
 		authapplication.MetricsReasonSessionRotateFailed,
 		authapplication.MetricsReasonAuthContextMissing,
 		authapplication.MetricsReasonSessionDeleteFailed,
+		authapplication.MetricsReasonAccessDenylistFailed,
+		authapplication.MetricsReasonAccessTokenDenied,
 		authapplication.MetricsReasonSessionRevokeFailed,
 		authapplication.MetricsReasonSystemError:
 		return reason

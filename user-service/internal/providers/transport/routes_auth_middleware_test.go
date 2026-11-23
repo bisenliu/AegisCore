@@ -70,17 +70,18 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		Validator:     validator,
 	})
 	err = RegisterRoutes(RegisterRouteParams{
-		Config:        cfg,
-		Log:           log,
-		Engine:        engine,
-		JWT:           jwtService,
-		TokenVersions: tokenVersions,
-		Authorizer:    authorizer,
-		Metrics:       metricsProvider,
-		Auth:          authController,
-		Permission:    permissionhttp.NewPermissionController(nil, validator),
-		Role:          rolehttp.NewRoleController(nil, nil, validator),
-		User:          userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
+		Config:         cfg,
+		Log:            log,
+		Engine:         engine,
+		JWT:            jwtService,
+		TokenVersions:  tokenVersions,
+		AccessDenylist: allowRouteAccessDenylist{},
+		Authorizer:     authorizer,
+		Metrics:        metricsProvider,
+		Auth:           authController,
+		Permission:     permissionhttp.NewPermissionController(nil, validator),
+		Role:           rolehttp.NewRoleController(nil, nil, validator),
+		User:           userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
 	})
 	require.NoError(t, err)
 	registerRouteTestRuntimeMetrics(t, metricsProvider)

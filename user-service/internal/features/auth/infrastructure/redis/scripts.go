@@ -21,10 +21,14 @@ var detachUserSessionsLua string
 //go:embed scripts/consume_password_change_session.lua
 var consumePasswordChangeSessionLua string
 
+//go:embed scripts/register_login_failure.lua
+var registerLoginFailureLua string
+
 var (
 	cacheTokenVersionScript            = rediscache.NewScript(cacheTokenVersionLua)
 	createSessionScript                = rediscache.NewScript(createSessionLua)
 	rotateSessionScript                = rediscache.NewScript(rotateSessionLua)
 	detachUserSessionsScript           = rediscache.NewScript(detachUserSessionsLua)
 	consumePasswordChangeSessionScript = rediscache.NewScript(consumePasswordChangeSessionLua)
+	registerLoginFailureScript         = rediscache.NewScript(registerLoginFailureLua)
 )

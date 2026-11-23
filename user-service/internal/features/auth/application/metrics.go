@@ -20,6 +20,10 @@ const (
 	MetricsReasonValidationFailed = "validation_failed"
 	// MetricsReasonCredentialInvalid 表示登录凭据无效。
 	MetricsReasonCredentialInvalid = "credential_invalid" // #nosec G101 -- 指标标签值，不包含真实凭据。
+	// MetricsReasonLoginLocked 表示用户名因连续密码失败被临时锁定。
+	MetricsReasonLoginLocked = "login_locked"
+	// MetricsReasonLoginLockoutUnavailable 表示登录锁定状态暂时无法确认。
+	MetricsReasonLoginLockoutUnavailable = "login_lockout_unavailable"
 	// MetricsReasonUserStatusRejected 表示用户状态拒绝登录。
 	MetricsReasonUserStatusRejected = "user_status_rejected"
 	// MetricsReasonPasswordChangeRequiredIssueFailed 表示强制改密 token 签发失败。
@@ -44,6 +48,10 @@ const (
 	MetricsReasonAuthContextMissing = "auth_context_missing"
 	// MetricsReasonSessionDeleteFailed 表示删除当前会话失败。
 	MetricsReasonSessionDeleteFailed = "session_delete_failed"
+	// MetricsReasonAccessDenylistFailed 表示当前 access token 拒绝名单写入失败。
+	MetricsReasonAccessDenylistFailed = "access_denylist_failed"
+	// MetricsReasonAccessTokenDenied 表示 access token 已在拒绝名单中。
+	MetricsReasonAccessTokenDenied = "access_token_denied"
 	// MetricsReasonSessionRevokeFailed 表示撤销全部会话失败。
 	MetricsReasonSessionRevokeFailed = "session_revoke_failed"
 	// MetricsReasonSystemError 表示未能稳定归类的系统异常。

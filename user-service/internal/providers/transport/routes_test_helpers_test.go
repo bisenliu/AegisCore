@@ -158,6 +158,17 @@ type routeTokenVersionValidator struct {
 	version int64
 }
 
+// allowRouteAccessDenylist 让路由装配测试默认放行 access token。
+type allowRouteAccessDenylist struct{}
+
+func (allowRouteAccessDenylist) DenyAccessToken(context.Context, string, time.Duration) error {
+	return nil
+}
+
+func (allowRouteAccessDenylist) AccessTokenDenied(context.Context, string) (bool, error) {
+	return false, nil
+}
+
 var _ permissionauthorization.Authorizer = (*routeAuthorizer)(nil)
 
 type routeAuthorizer struct {

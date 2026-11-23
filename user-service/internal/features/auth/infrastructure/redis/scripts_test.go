@@ -50,6 +50,15 @@ func TestRedisLuaScriptsDeclareContracts(t *testing.T) {
 			},
 		},
 		{
+			name:   "register login failure",
+			source: registerLoginFailureLua,
+			metadata: []string{
+				"-- name: auth.register_login_failure",
+				"-- contract: KEYS[1]=login_failure_key, ARGV[1]=max_failures, ARGV[2]=failure_window_milliseconds, ARGV[3]=lockout_ttl_milliseconds",
+				"-- version: 1",
+			},
+		},
+		{
 			name:   "consume password change session",
 			source: consumePasswordChangeSessionLua,
 			metadata: []string{

@@ -153,7 +153,11 @@ func (i *authTokenIssuer) VerifyAccessToken(tokenString string) (platformauth.Ac
 	if err != nil {
 		return platformauth.AccessToken{}, err
 	}
-	return platformauth.AccessToken{UserID: claims.UserID.String(), SessionID: claims.SessionID, TokenVersion: claims.TokenVersion}, nil
+	expiresAt := time.Time{}
+	if claims.ExpiresAt != nil {
+		expiresAt = claims.ExpiresAt.Time
+	}
+	return platformauth.AccessToken{ID: claims.ID, UserID: claims.UserID.String(), SessionID: claims.SessionID, TokenVersion: claims.TokenVersion, ExpiresAt: expiresAt}, nil
 }
 
 // parse 解析并校验加密通行证文本，提取其中包含的用户信息和有效期。

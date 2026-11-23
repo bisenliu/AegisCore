@@ -54,6 +54,7 @@ func NewAuthController(options AuthControllerOptions) *AuthController {
 // @Success 200 {object} response.Envelope{data=authhttp.TokenResponse} "登录成功或需要强制改密"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
 // @Failure 401 {object} response.Envelope "用户名或密码错误"
+// @Failure 403 {object} response.Envelope "登录尝试过于频繁，账号已临时锁定"
 // @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 503 {object} response.Envelope "认证服务繁忙"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
@@ -153,12 +154,13 @@ func (ctl *AuthController) ForceChangePassword(c *gin.Context) {
 
 // LogoutCurrentSession 退出当前登录会话接口。
 // @Summary 退出当前设备
-// @Description 删除当前会话的 Refresh Token 会话记录，不修改用户 token_version。
+// @Description 删除当前 Refresh Token 会话，并将当前 Access Token 加入剩余有效期拒绝名单，不修改用户 token_version。
 // @Tags 认证
 // @Produce json
 // @Success 200 {object} response.Envelope{data=authhttp.LogoutResponse} "退出成功"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 429 {object} response.Envelope "请求过于频繁"
+// @Failure 503 {object} response.Envelope "当前 Access Token 尚未完成吊销"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /auth/logout [post]

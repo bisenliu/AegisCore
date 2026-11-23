@@ -17,6 +17,7 @@ const (
 
 type userIDContextKey struct{}
 type sessionIDContextKey struct{}
+type accessTokenContextKey struct{}
 
 // WithUserID 返回携带认证用户 ID 的 context。
 func WithUserID(ctx context.Context, userID string) context.Context {
@@ -35,6 +36,20 @@ func UserIDFromContext(ctx context.Context) (string, bool) {
 // WithSessionID 返回携带认证会话 ID 的 context。
 func WithSessionID(ctx context.Context, sessionID string) context.Context {
 	return context.WithValue(ctx, sessionIDContextKey{}, sessionID)
+}
+
+// WithAccessToken 返回携带已校验 access token 结果的 context。
+func WithAccessToken(ctx context.Context, token AccessToken) context.Context {
+	return context.WithValue(ctx, accessTokenContextKey{}, token)
+}
+
+// AccessTokenFromContext 返回已校验 access token 结果，并标记其是否存在。
+func AccessTokenFromContext(ctx context.Context) (AccessToken, bool) {
+	if ctx == nil {
+		return AccessToken{}, false
+	}
+	token, ok := ctx.Value(accessTokenContextKey{}).(AccessToken)
+	return token, ok && token.ID != "" && token.UserID != ""
 }
 
 // SessionIDFromContext 从 ctx 返回非空认证会话 ID，并标记其是否存在。

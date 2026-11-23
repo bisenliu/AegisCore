@@ -31,6 +31,8 @@ type authCommandFixture struct {
 	credentials *MockVerifier
 	tokens      *MockIssuer
 	sessions    *MockLifecycle
+	lockout     *stubLoginLockout
+	denylist    *stubAccessDenylist
 }
 
 type noopTokenVersionInvalidator struct{}
@@ -46,22 +48,99 @@ func newAuthCommandFixtureWithController(ctrl *gomock.Controller, authCfg servic
 	credentials := NewMockVerifier(ctrl)
 	tokens := NewMockIssuer(ctrl)
 	sessions := NewMockLifecycle(ctrl)
+	lockout := &stubLoginLockout{}
+	denylist := &stubAccessDenylist{}
+	login, err := NewLoginUseCase(credentials, tokens, sessions, lockout, authCfg.LoginLockout, metrics)
+	if err != nil {
+		panic(err)
+	}
 	return &authCommandFixture{
 		testAuthUseCases: testAuthUseCases{
-			LoginUseCase:                NewLoginUseCase(credentials, tokens, sessions, metrics),
+			LoginUseCase:                login,
 			RefreshTokenUseCase:         NewRefreshTokenUseCase(tokens, sessions, metrics, RefreshTokenSettings{RefreshTokenRotation: authCfg.RefreshTokenRotation}),
 			ForceChangePasswordUseCase:  NewForceChangePasswordUseCase(credentials, tokens, sessions, metrics),
-			LogoutCurrentSessionUseCase: NewLogoutCurrentSessionUseCase(sessions, metrics),
+			LogoutCurrentSessionUseCase: NewLogoutCurrentSessionUseCase(sessions, denylist, metrics),
 			LogoutAllSessionsUseCase:    NewLogoutAllSessionsUseCase(sessions, metrics),
 		},
 		credentials: credentials,
 		tokens:      tokens,
 		sessions:    sessions,
+		lockout:     lockout,
+		denylist:    denylist,
 	}
 }
 
 func defaultAuthConfig(rotation bool) serviceconfig.AuthConfig {
-	return serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 5}
+	return serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 5, LoginLockout: serviceconfig.LoginLockoutConfig{Enabled: true, MaxFailures: 5, FailureWindow: 15 * time.Minute, LockoutTTL: 15 * time.Minute}}
+}
+
+// stubLoginLockout 用内存计数模拟登录锁定，测试不依赖 Redis。
+type stubLoginLockout struct {
+	failures      int
+	locked        bool
+	statusErr     error
+	registerErr   error
+	clearErr      error
+	cleared       bool
+	registered    int
+	statusLookups int
+}
+
+func (s *stubLoginLockout) LoginLockoutStatus(context.Context, string) (authapplication.LoginLockoutStatus, error) {
+	s.statusLookups++
+	if s.statusErr != nil {
+		return authapplication.LoginLockoutStatus{}, s.statusErr
+	}
+	return authapplication.LoginLockoutStatus{Locked: s.locked}, nil
+}
+
+func (s *stubLoginLockout) RegisterLoginFailure(context.Context, string, int, time.Duration, time.Duration) (authapplication.LoginLockoutStatus, error) {
+	s.registered++
+	if s.registerErr != nil {
+		return authapplication.LoginLockoutStatus{}, s.registerErr
+	}
+	s.failures++
+	if s.failures >= 5 {
+		s.locked = true
+	}
+	return authapplication.LoginLockoutStatus{Locked: s.locked}, nil
+}
+
+// stubAccessDenylist 记录单会话登出是否写入当前 access token。
+type stubAccessDenylist struct {
+	denied    map[string]time.Duration
+	denyErr   error
+	deniedHit bool
+	checkErr  error
+}
+
+func (s *stubAccessDenylist) DenyAccessToken(_ context.Context, tokenID string, ttl time.Duration) error {
+	if s.denyErr != nil {
+		return s.denyErr
+	}
+	if s.denied == nil {
+		s.denied = map[string]time.Duration{}
+	}
+	s.denied[tokenID] = ttl
+	return nil
+}
+
+func (s *stubAccessDenylist) AccessTokenDenied(_ context.Context, tokenID string) (bool, error) {
+	if s.checkErr != nil {
+		return false, s.checkErr
+	}
+	_, ok := s.denied[tokenID]
+	return ok || s.deniedHit, nil
+}
+
+func (s *stubLoginLockout) ClearLoginFailures(context.Context, string) error {
+	if s.clearErr != nil {
+		return s.clearErr
+	}
+	s.failures = 0
+	s.locked = false
+	s.cleared = true
+	return nil
 }
 
 func normalCredential() *authdomain.UserCredential {

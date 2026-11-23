@@ -25,6 +25,16 @@ func AuthenticatedSession(ctx context.Context) (uuid.UUID, string, error) {
 	return parsedUserID, sessionID, nil
 }
 
+// AuthenticatedAccessToken 从 ctx 读取当前请求已校验的 access token。
+// 缺少上下文、jti 或有效过期时间元数据时无法安全提取，按缺少会话凭据处理。
+func AuthenticatedAccessToken(ctx context.Context) (platformauth.AccessToken, error) {
+	token, ok := platformauth.AccessTokenFromContext(ctx)
+	if !ok || token.ID == "" || token.ExpiresAt.IsZero() {
+		return platformauth.AccessToken{}, authdomain.ErrMissingSession
+	}
+	return token, nil
+}
+
 // AuthenticatedUserID 从 ctx 读取已认证用户标识。
 func AuthenticatedUserID(ctx context.Context) (uuid.UUID, error) {
 	userIDString, ok := platformauth.UserIDFromContext(ctx)

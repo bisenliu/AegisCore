@@ -26,6 +26,10 @@ const (
 	reasonPasswordChangeSessionMismatch contracterrors.Reason = "password_change_session_mismatch"
 	// reasonSessionRevocationIncomplete 是改密或退出时撤销会话未能完全成功的错误原因标识。
 	reasonSessionRevocationIncomplete contracterrors.Reason = "session_revocation_incomplete"
+	// reasonLoginLockoutUnavailable 是登录锁定状态暂时无法确认的错误原因标识。
+	reasonLoginLockoutUnavailable contracterrors.Reason = "login_lockout_unavailable"
+	// reasonAccessDenylistUnavailable 是 access token 拒绝名单暂时无法确认的错误原因标识。
+	reasonAccessDenylistUnavailable contracterrors.Reason = "access_denylist_unavailable"
 )
 
 // ErrInvalidCredentials 表示登录凭据不能认证用户。
@@ -57,3 +61,13 @@ var ErrPasswordChangeSessionMismatch = contracterrors.New(contracterrors.KindUna
 
 // ErrSessionRevocationIncomplete 表示安全敏感会话撤销投影未完整完成。
 var ErrSessionRevocationIncomplete = contracterrors.New(contracterrors.KindServiceUnavailable, reasonSessionRevocationIncomplete, contracterrors.CodeServiceUnavailable, messages.AuthRevocationIncomplete)
+
+// ErrLoginLocked 表示该用户名因连续密码失败被临时锁定。
+// 公开文案不包含失败次数、剩余时间和用户是否存在，避免把锁定接口变成账号探测工具。
+var ErrLoginLocked = contracterrors.New(contracterrors.KindForbidden, contracterrors.ReasonUserAccountLocked, contracterrors.CodeUserAccountLocked, messages.LoginTemporarilyLocked)
+
+// ErrLoginLockoutUnavailable 表示登录锁定状态无法确认，调用方必须拒绝登录。
+var ErrLoginLockoutUnavailable = contracterrors.New(contracterrors.KindServiceUnavailable, reasonLoginLockoutUnavailable, contracterrors.CodeServiceUnavailable, messages.LoginTemporarilyUnavailable)
+
+// ErrAccessDenylistUnavailable 表示 access token 拒绝名单无法确认，调用方必须拒绝访问。
+var ErrAccessDenylistUnavailable = contracterrors.New(contracterrors.KindServiceUnavailable, reasonAccessDenylistUnavailable, contracterrors.CodeServiceUnavailable, messages.AuthRevocationIncomplete)

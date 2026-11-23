@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -138,6 +139,36 @@ func TestRegisterUserServiceHTTPRoutesAppliesRateLimits(t *testing.T) {
 		require.NotEqual(t, http.StatusTooManyRequests, recorder.Code, "body=%s", recorder.Body.String())
 		require.Equal(t, 0, anonymousLimiter.calls)
 		require.Equal(t, 0, userLimiter.calls)
+	})
+}
+
+func TestRegisterUserServiceHTTPRoutesChecksAccessDenylistBeforeRBAC(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("denied token returns unified invalid and skips rbac", func(t *testing.T) {
+		authorizer := &routerRegistrationAuthorizer{allowed: true}
+		params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{authorizer: authorizer})
+		params.AccessDenylist = stubAccessDenylist{denied: true}
+		engine := gin.New()
+		require.NoError(t, RegisterUserServiceHTTPRoutes(engine, params))
+
+		recorder := executeRouterRegistrationRequest(engine, http.MethodGet, "/api/v1/users", signRouterRegistrationAccessToken(t), "")
+		require.Equal(t, http.StatusUnauthorized, recorder.Code)
+		requireRouterRegistrationFailureCode(t, recorder, contracterrors.CodeTokenInvalid)
+		require.Zero(t, authorizer.calls)
+	})
+
+	t.Run("denylist read failure is fail closed", func(t *testing.T) {
+		authorizer := &routerRegistrationAuthorizer{allowed: true}
+		params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{authorizer: authorizer})
+		params.AccessDenylist = stubAccessDenylist{err: errors.New("redis unavailable")}
+		engine := gin.New()
+		require.NoError(t, RegisterUserServiceHTTPRoutes(engine, params))
+
+		recorder := executeRouterRegistrationRequest(engine, http.MethodGet, "/api/v1/users", signRouterRegistrationAccessToken(t), "")
+		require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+		requireRouterRegistrationFailureCode(t, recorder, contracterrors.CodeServiceUnavailable)
+		require.Zero(t, authorizer.calls)
 	})
 }
 
@@ -292,6 +323,34 @@ func (routerRegistrationTokenVersionValidator) ValidateTokenVersion(context.Cont
 	return nil
 }
 
+// allowAccessDenylist 让路由注册测试默认放行，拒绝名单行为由认证测试覆盖。
+type allowAccessDenylist struct{}
+
+func (allowAccessDenylist) DenyAccessToken(context.Context, string, time.Duration) error {
+	return nil
+}
+
+func (allowAccessDenylist) AccessTokenDenied(context.Context, string) (bool, error) {
+	return false, nil
+}
+
+// stubAccessDenylist 让路由测试控制拒绝名单命中和读取失败。
+type stubAccessDenylist struct {
+	denied bool
+	err    error
+}
+
+func (stubAccessDenylist) DenyAccessToken(context.Context, string, time.Duration) error {
+	return nil
+}
+
+func (s stubAccessDenylist) AccessTokenDenied(context.Context, string) (bool, error) {
+	if s.err != nil {
+		return false, s.err
+	}
+	return s.denied, nil
+}
+
 func (a *routerRegistrationAuthorizer) Enforce(context.Context, string, string, string) (bool, error) {
 	a.calls++
 	return a.allowed, nil
@@ -327,6 +386,7 @@ func newRouterRegistrationRouteParams(t *testing.T, opts routerRegistrationRoute
 		AnonymousRateLimiter:  opts.anonymousLimiter,
 		UserRateLimiter:       opts.userLimiter,
 		TokenVersionValidator: routerRegistrationTokenVersionValidator{},
+		AccessDenylist:        allowAccessDenylist{},
 		Authorizer:            authorizer,
 		Auth:                  newRouterRegistrationAuthController(validator),
 		Permission:            permissionhttp.NewPermissionController(nil, validator),
@@ -451,7 +511,7 @@ func executeRouterRegistrationRequest(engine *gin.Engine, method string, path st
 
 func signRouterRegistrationAccessToken(t *testing.T) string {
 	t.Helper()
-	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, routerRegistrationClaims{UserID: uuid.New().String(), TokenVersion: 1, SessionID: uuid.New().String(), RegisteredClaims: jwtv5.RegisteredClaims{Subject: "access", ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Minute))}}).SignedString([]byte("router-registration-secret"))
+	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, routerRegistrationClaims{UserID: uuid.New().String(), TokenVersion: 1, SessionID: uuid.New().String(), RegisteredClaims: jwtv5.RegisteredClaims{ID: uuid.New().String(), Subject: "access", ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Minute))}}).SignedString([]byte("router-registration-secret"))
 	require.NoError(t, err)
 	return token
 }
@@ -474,7 +534,11 @@ func (routerRegistrationAccessVerifier) VerifyAccessToken(token string) (platfor
 	if parsed == nil || !parsed.Valid || claims.Subject != "access" {
 		return platformauth.AccessToken{}, jwtv5.ErrTokenInvalidClaims
 	}
-	return platformauth.AccessToken{UserID: claims.UserID, SessionID: claims.SessionID, TokenVersion: claims.TokenVersion}, nil
+	expiresAt := time.Time{}
+	if claims.ExpiresAt != nil {
+		expiresAt = claims.ExpiresAt.Time
+	}
+	return platformauth.AccessToken{ID: claims.ID, UserID: claims.UserID, SessionID: claims.SessionID, TokenVersion: claims.TokenVersion, ExpiresAt: expiresAt}, nil
 }
 
 func routerRegistrationRuntimeRoutes() []routerRegisteredRoute {

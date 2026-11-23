@@ -140,7 +140,7 @@ func TestAuthModuleMetricsEdgesAreRequired(t *testing.T) {
 func TestAuthModuleCommandConstructorsHaveMetricsEdges(t *testing.T) {
 	outputs := newAuthModuleTestApp(t, true, true)
 	graphText := string(outputs.graph)
-	for _, constructor := range []string{"NewLoginUseCase", "NewRefreshTokenUseCase", "NewForceChangePasswordUseCase", "NewLogoutCurrentSessionUseCase", "NewLogoutAllSessionsUseCase"} {
+	for _, constructor := range []string{"newLoginUseCase", "NewRefreshTokenUseCase", "NewForceChangePasswordUseCase", "newLogoutCurrentSessionUseCase", "NewLogoutAllSessionsUseCase"} {
 		match := regexp.MustCompile(`(constructor_\d+) \[shape=plaintext label="` + constructor + `"\];`).FindStringSubmatch(graphText)
 		require.Len(t, match, 2, graphText)
 		require.Contains(t, graphText, match[1]+` -> "application.Metrics" [ltail=`)

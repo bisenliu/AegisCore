@@ -23,6 +23,7 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 			TokenVersionCacheTTL:     3 * time.Minute,
 			RefreshTokenRotation:     true,
 			MaxActiveSessionsPerUser: 7,
+			LoginLockout:             LoginLockoutConfig{Enabled: true, MaxFailures: 5, FailureWindow: 15 * time.Minute, LockoutTTL: 15 * time.Minute},
 		},
 		RBAC: RBACConfig{
 			UserRoleCache: FeatureCacheConfig{Enabled: true, TTL: 5 * time.Second},
@@ -44,6 +45,7 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 		TokenVersionCacheTTL:     3 * time.Minute,
 		RefreshTokenRotation:     true,
 		MaxActiveSessionsPerUser: 7,
+		LoginLockout:             cfg.Auth.LoginLockout,
 	}, NewAuthSettings(cfg))
 	require.Equal(t, RBACSettings{
 		AppName:       "user-service",
@@ -63,7 +65,7 @@ func TestNarrowSettingsFieldOwnership(t *testing.T) {
 		value  any
 		fields []string
 	}{
-		{name: "auth", value: AuthSettings{}, fields: []string{"AppName", "JWT", "TokenVersionCache", "TokenVersionCacheTTL", "RefreshTokenRotation", "MaxActiveSessionsPerUser"}},
+		{name: "auth", value: AuthSettings{}, fields: []string{"AppName", "JWT", "TokenVersionCache", "TokenVersionCacheTTL", "RefreshTokenRotation", "MaxActiveSessionsPerUser", "LoginLockout"}},
 		{name: "rbac", value: RBACSettings{}, fields: []string{"AppName", "UserRoleCache", "PolicyWatcher"}},
 		{name: "ent", value: EntSettings{}, fields: []string{"Plugins"}},
 		{name: "rate limit", value: RateLimitSettings{}, fields: []string{"APIRateLimit"}},

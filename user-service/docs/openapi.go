@@ -702,6 +702,16 @@ const openAPIDocument = `{
             },
             "description": "用户名或密码错误"
           },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "登录尝试过于频繁，账号已临时锁定"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -741,7 +751,7 @@ const openAPIDocument = `{
     },
     "/auth/logout": {
       "post": {
-        "description": "删除当前会话的 Refresh Token 会话记录，不修改用户 token_version。",
+        "description": "删除当前 Refresh Token 会话，并将当前 Access Token 加入剩余有效期拒绝名单，不修改用户 token_version。",
         "responses": {
           "200": {
             "content": {
@@ -794,6 +804,16 @@ const openAPIDocument = `{
               }
             },
             "description": "服务器内部错误"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "当前 Access Token 尚未完成吊销"
           }
         },
         "security": [

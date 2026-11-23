@@ -91,6 +91,30 @@ func TestAuthDomainErrorsCarryApplicationContract(t *testing.T) {
 			code:    contracterrors.CodeServiceUnavailable,
 			message: messages.AuthRevocationIncomplete,
 		},
+		{
+			name:    "login locked",
+			err:     ErrLoginLocked,
+			kind:    contracterrors.KindForbidden,
+			reason:  contracterrors.ReasonUserAccountLocked,
+			code:    contracterrors.CodeUserAccountLocked,
+			message: messages.LoginTemporarilyLocked,
+		},
+		{
+			name:    "login lockout unavailable",
+			err:     ErrLoginLockoutUnavailable,
+			kind:    contracterrors.KindServiceUnavailable,
+			reason:  reasonLoginLockoutUnavailable,
+			code:    contracterrors.CodeServiceUnavailable,
+			message: messages.LoginTemporarilyUnavailable,
+		},
+		{
+			name:    "access denylist unavailable",
+			err:     ErrAccessDenylistUnavailable,
+			kind:    contracterrors.KindServiceUnavailable,
+			reason:  reasonAccessDenylistUnavailable,
+			code:    contracterrors.CodeServiceUnavailable,
+			message: messages.AuthRevocationIncomplete,
+		},
 	}
 
 	for _, tt := range tests {

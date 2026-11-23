@@ -10,6 +10,7 @@ import (
 	"github.com/aegiscore/platform/runtime/config"
 	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 	platformauth "github.com/aegiscore/platform/security/auth"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
@@ -29,6 +30,7 @@ type RouteParams struct {
 	AnonymousRateLimiter  platformmw.RateLimiter
 	UserRateLimiter       platformmw.RateLimiter
 	TokenVersionValidator platformauth.TokenVersionValidator
+	AccessDenylist        authapplication.AccessTokenDenylist
 	Authorizer            permissionauthorization.Authorizer
 	Auth                  *authhttp.AuthController
 	Permission            *permissionhttp.PermissionController
@@ -65,6 +67,7 @@ func registerV1Routes(engine *gin.Engine, params RouteParams, rateLimitObserver 
 	// 路由分层必须先认证再授权：auth 保护接口只需要登录态，permission/role/user 等业务接口还需 RBAC 授权。
 	authenticated := v1.Group("")
 	authenticated.Use(platformmw.AuthWithTokenVersionValidator(params.Log, params.JWT, params.TokenVersionValidator))
+	authenticated.Use(authhttp.AccessTokenDenylist(params.Log, params.AccessDenylist))
 	authenticated.Use(platformmw.RateLimit(rateLimitObserver.options("authenticated_api", params.UserRateLimiter, platformmw.UserIDRateLimitKey("authenticated-api"))))
 
 	authhttp.RegisterProtectedRoutes(authenticated.Group("/auth"), params.Auth)
@@ -81,6 +84,9 @@ func registerV1Routes(engine *gin.Engine, params RouteParams, rateLimitObserver 
 func validateSecurityRouteDependencies(params RouteParams) error {
 	if params.TokenVersionValidator == nil {
 		return fmt.Errorf("token version validator is required")
+	}
+	if params.AccessDenylist == nil {
+		return fmt.Errorf("access token denylist is required")
 	}
 	if params.Authorizer == nil {
 		return fmt.Errorf("rbac authorizer is required")

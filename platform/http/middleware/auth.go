@@ -89,6 +89,7 @@ func AuthWithTokenVersionValidator(log *zap.Logger, verifier auth.AccessTokenVer
 
 		ctx = auth.WithUserID(ctx, claims.UserID)
 		ctx = auth.WithSessionID(ctx, claims.SessionID)
+		ctx = auth.WithAccessToken(ctx, claims)
 		c.Request = c.Request.WithContext(ctx)
 		// 同时写入两种 context，因为下游代码可能读取 net/http context 或 Gin helper。
 		c.Set(auth.UserIDKey, claims.UserID)

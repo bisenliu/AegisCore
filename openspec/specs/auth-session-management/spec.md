@@ -4,26 +4,26 @@
 ## Requirements
 ### Requirement: 登录、用途隔离令牌与 HTTP 边界
 
-系统 MUST 在凭证、用户状态和会话策略校验通过后签发用途隔离的 access、refresh 或 password-change token。所有 token MUST 包含标准 `jti`，并通过 `access`、`refresh` 和 `password_change` subject 限定使用流程；任一用途、subject 或必要 claims 不匹配时 MUST 被拒绝。系统 MUST 仅通过 `/api/v1/auth` 暴露认证入口，执行请求体容量检查，并使用共享 response helper 渲染业务错误。登录审计客户端地址 MUST 来自 Gin trusted proxy 规则解析后的 `c.ClientIP()`。
+系统 MUST 在凭证、用户状态、登录锁定和会话策略校验通过后签发用途隔离的 access、refresh 或 password-change token。所有 token MUST 包含标准 `jti`，并通过 `access`、`refresh` 和 `password_change` subject 限定使用流程；任一用途、subject 或必要 claims 不匹配时 MUST 被拒绝。系统 MUST 仅通过 `/api/v1/auth` 暴露认证入口，执行请求体容量检查，并使用共享 response helper 渲染业务错误。登录审计客户端地址 MUST 来自 Gin trusted proxy 规则解析后的 `c.ClientIP()`。
 
 #### Scenario: 普通登录成功
 
-- **WHEN** 用户提供合法用户名和正确密码，且状态允许普通登录
-- **THEN** 系统 MUST 创建普通 refresh session 并签发 access token 与 refresh token
+- **WHEN** 用户提供合法用户名和正确密码，账号未被登录锁定，且状态允许普通登录
+- **THEN** 系统 MUST 清除该用户名的登录失败计数，创建普通 refresh session 并签发 access token 与 refresh token
 - **AND** 登录结果 MUST 为 `PasswordChangeRequired=false`
 - **AND** HTTP 响应 MUST 为 `200 OK`、`CodeOK` 和 `success=true`，data MUST 包含 access token、refresh token、token type 和 access token 过期秒数，MUST NOT 包含登录状态枚举字段
 
 #### Scenario: 登录拒绝与侧信道防护
 
-- **WHEN** 用户名不存在、密码不匹配，或用户状态不允许登录且不属于强制改密状态
+- **WHEN** 用户名不存在、密码不匹配，或用户状态不允许登录且不属于强制改密状态，且账号未达到登录锁定阈值
 - **THEN** 系统 MUST 拒绝签发任何 token 和创建会话，且公开错误 MUST NOT 泄露用户是否存在、密码匹配结果或具体用户状态
-- **AND** 用户名不存在时 MUST 使用当前 bcrypt dummy hash 执行 dummy password verification
+- **AND** 用户名不存在时 MUST 使用当前 bcrypt dummy hash 执行 dummy password verification，并将该规范化用户名计入登录失败
 - **AND** 旧 Argon2id、未知算法或格式非法的存储哈希 MUST 被视为无效凭据，MUST NOT 触发旧哈希验证、迁移、fallback 或 rehash
 
 #### Scenario: 强制改密登录响应
 
-- **WHEN** 凭据有效且用户状态要求强制修改密码
-- **THEN** 登录结果 MUST 为 `PasswordChangeRequired=true`，系统 MUST 创建一次性 password-change session 并只签发 subject 为 `password_change` 的受限 token，MUST NOT 创建普通 refresh session 或签发 refresh token
+- **WHEN** 凭据有效、账号未被登录锁定，且用户状态要求强制修改密码
+- **THEN** 登录结果 MUST 为 `PasswordChangeRequired=true`，系统 MUST 清除该用户名的登录失败计数，创建一次性 password-change session 并只签发 subject 为 `password_change` 的受限 token，MUST NOT 创建普通 refresh session 或签发 refresh token
 - **AND** HTTP 响应 MUST 为 `200 OK`、`CodePasswordChangeRequired`、code `20006` 和 `success=false`
 - **AND** data MUST 只包含受限 access token、token type 和过期秒数，MUST NOT 包含 refresh token、`status`、`authenticated` 或 `password_change_required` 枚举字段
 
@@ -32,7 +32,7 @@
 - **WHEN** 调用方访问登录、refresh 或强制改密入口
 - **THEN** controller MUST 允许请求进入并在业务层校验相应凭据或 token
 - **AND** 强制改密入口 MUST 挂载为 `POST /api/v1/auth/force-change-password`，MUST 使用 `password_change` 受限 token 和一次性 password-change session 完成校验，MUST NOT 要求普通 access token middleware 先放行
-- **AND** 退出当前会话和退出全部会话 MUST 在业务处理前校验 bearer token、user-service access claims 和 token version
+- **AND** 退出当前会话和退出全部会话 MUST 在业务处理前校验 bearer token、user-service access claims、token version 和 access token 拒绝名单
 - **AND** 系统 MUST NOT 暴露旧认证路径别名或认证绕过路径，包括 `POST /api/v1/auth/change-password`
 - **AND** 共享认证 middleware 只 MUST 获得 access token 验证能力，MUST NOT 获得 refresh token、password-change token 或任何 token 签发能力
 
@@ -40,6 +40,8 @@
 
 - **WHEN** auth controller 收到凭据、用户状态、token 或 session 无效错误
 - **THEN** controller MUST 直接调用 `response.Fail(c, err)` 返回稳定的 `401 Unauthorized` 认证错误和统一公开文案
+- **WHEN** 登录锁定拒绝密码登录
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)` 返回 `403 Forbidden`、`CodeUserAccountLocked` 和稳定公开文案
 - **WHEN** 认证流程返回 `authdomain.ErrSessionRevocationIncomplete`
 - **THEN** 系统 MUST 返回 `503 Service Unavailable`、`CodeServiceUnavailable` 和稳定公开消息
 - **AND** 认证错误 MUST 携带稳定 `Kind`、`Reason`、`Code` 和中文公开 `Message`，直接或包装后 MUST 保持 `errors.Is` 或稳定 `Reason` 分类能力
@@ -48,13 +50,14 @@
 #### Scenario: 认证入口请求体容量边界
 
 - **WHEN** 登录、refresh 或强制改密请求的固定长度、chunked 或含尾随 JSON 的总请求体超过配置上限
-- **THEN** 系统 MUST 在密码校验、token 解析、session 消费、use case 和 token 签发前返回 `413 Payload Too Large`
-- **AND** 认证、限流和字段校验错误 MUST 保持各自语义，不得互相伪装
+- **THEN** 系统 MUST 在密码校验、登录锁定更新、token 解析、session 消费、use case 和 token 签发前返回 `413 Payload Too Large`
+- **AND** 认证、限流、登录锁定和字段校验错误 MUST 保持各自语义，不得互相伪装
 
 #### Scenario: 登录审计客户端地址
 
 - **WHEN** 登录请求来自显式信任的代理且代理提供已清洗的 forwarded headers
 - **THEN** controller MUST 将 `c.ClientIP()` 解析的客户端地址写入认证审计上下文
+- **AND** 登录锁定计数 MUST NOT 使用该客户端地址作为 key
 - **WHEN** 登录请求来自未信任 TCP peer
 - **THEN** 系统 MUST 使用 peer 地址并忽略其提供的 `X-Forwarded-For` 或 `X-Real-IP`
 - **AND** controller、input preparer 与 auth application MUST NOT 手写解析 forwarded headers
@@ -79,12 +82,13 @@
 
 ### Requirement: Token version 校验与会话撤销
 
-系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地 loading cache 和 Redis 投影加速校验。缓存未命中、过期、容量驱逐或显式禁用只能影响性能，MUST NOT 改变认证与撤销语义。退出全部会话和强制改密 MUST 递增主事实，使旧 access token 失效并撤销相应 refresh sessions。token-version feature cache MUST 由 user-service 私有配置提供启停和 TTL 默认值、启用时校验，以及到通用 localcache 配置的集中映射；容量和 load timeout MUST 由 user-service 代码常量提供，auth 构造路径 MUST 只消费窄 auth settings。递增 `token_version` 或更新凭证并返回新 `token_version` MUST 是单一确定的 PostgreSQL 结果，成功路径 MUST NOT 在提交后通过第二条 `SELECT` 才获取撤销版本。
+系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地 loading cache 和 Redis 投影加速校验。缓存未命中、过期、容量驱逐或显式禁用只能影响性能，MUST NOT 改变认证与撤销语义。退出全部会话和强制改密 MUST 递增主事实，使旧 access token 失效并撤销相应 refresh sessions。退出当前会话 MUST NOT 递增主事实，MUST 通过 access token 拒绝名单吊销当前 access token。token-version feature cache MUST 由 user-service 私有配置提供启停和 TTL 默认值、启用时校验，以及到通用 localcache 配置的集中映射；容量和 load timeout MUST 由 user-service 代码常量提供，auth 构造路径 MUST 只消费窄 auth settings。递增 `token_version` 或更新凭证并返回新 `token_version` MUST 是单一确定的 PostgreSQL 结果，成功路径 MUST NOT 在提交后通过第二条 `SELECT` 才获取撤销版本。
 
 #### Scenario: 受保护访问与本地缓存
 
 - **WHEN** access token 已通过签名、subject 和过期校验
 - **THEN** 系统 MUST 按有界本地缓存、Redis 投影和 PostgreSQL 当前值的顺序解析 token version，版本不一致时 MUST 拒绝访问，Redis miss 后 MAY 回源并回填
+- **AND** token version 一致后，系统 MUST 检查 access token 拒绝名单；命中时 MUST 返回统一 token invalid
 - **AND** UUID MUST 在 validator 边界转换为规范 string key；`int64` token version MUST 直接缓存，MUST NOT 配置 platform key encoder 或 clone callback
 - **AND** 系统 MUST NOT 缓存错误结果；容量驱逐或 TTL 过期后 MUST 可通过同 key 合并回源恢复校验，不得依赖异步写入可见性
 - **WHEN** `auth.token_version_cache` 未配置
@@ -117,13 +121,15 @@
 #### Scenario: 退出当前会话
 
 - **WHEN** 已认证用户退出当前会话，或重复退出已撤销或不存在的会话
-- **THEN** 系统 MUST 只撤销目标 refresh session，MUST NOT 递增 `token_version` 或恢复会话，并 MUST 返回稳定结果或明确错误
+- **THEN** 系统 MUST 只撤销目标 refresh session，MUST NOT 递增 `token_version` 或恢复会话
+- **AND** 系统 MUST 将当前 access token 的 `jti` 写入剩余有效期 TTL 的 Redis 拒绝名单后才能返回登出成功
+- **AND** refresh session 删除失败或拒绝名单写入失败时 MUST 返回明确错误
 
 #### Scenario: 退出全部会话
 
 - **WHEN** 已认证用户请求退出全部会话
 - **THEN** 系统 MUST 递增 PostgreSQL `token_version` 并在同一数据库结果中返回新版本，然后撤销全部活跃 refresh sessions，使旧 access 和 refresh token 无效
-- **AND** 安全失效 MUST NOT 依赖后台 workerpool，Redis key 物理清理 MAY 异步执行
+- **AND** 安全失效 MUST NOT 依赖后台 workerpool 或 access token 拒绝名单，Redis key 物理清理 MAY 异步执行
 
 #### Scenario: 撤销版本原子返回
 
@@ -144,11 +150,13 @@
 - **WHEN** PostgreSQL 主事实已更新并已返回新 `token_version`，但 Redis 投影刷新或 refresh session 删除失败
 - **THEN** use case MUST 返回 `authdomain.ErrSessionRevocationIncomplete`，MUST NOT 返回普通成功结果
 - **AND** 错误链 MUST 保留底层原因，metrics MUST 将结果记录为撤销不完整失败
+- **WHEN** 单会话登出的 refresh session 删除已完成或会话已不存在，但 access token 拒绝名单写入失败
+- **THEN** use case MUST 返回 `authdomain.ErrSessionRevocationIncomplete`，MUST NOT 返回普通登出成功
 
 #### Scenario: Auth settings 依赖边界
 
-- **WHEN** composition 构造 token issuer、session 策略、token-version localcache 或 validator
-- **THEN** auth provider MUST 接收只包含 JWT、session 和 token-version cache 所需字段的 auth settings
+- **WHEN** composition 构造 token issuer、session 策略、token-version localcache、validator、登录锁定或 access token 拒绝名单
+- **THEN** auth provider MUST 接收只包含 JWT、session、token-version cache、登录锁定和拒绝名单所需字段的 auth settings
 - **AND** auth feature MUST NOT 依赖完整 user-service 根配置或读取 RBAC、Ent、resources 等无关配置段
 
 ### Requirement: 强制改密一次性流程
@@ -256,4 +264,90 @@ user-service auth feature MUST 私有拥有 token issuer、claims schema、subje
 - **WHEN** 后台 purge 任务被提交并成功执行
 - **THEN** 系统 MUST 继续使用 detached purge key 读取待清理 session 索引，并使用同一用户 session prefix 构造待删除 refresh session key
 - **AND** 日志字段收敛 MUST NOT 改变退出全部会话、强制改密、token version 递增、refresh session 撤销或 Redis key 存储格式
+
+### Requirement: 账号维度登录失败锁定
+
+系统 MUST 在启用登录锁定时，按规范化用户名记录连续密码登录失败，并在达到阈值后于锁定窗口内拒绝该用户名的密码登录。规范化用户名 MUST 为 trim 后的 Unicode case-fold 值。锁定状态 MUST 保存在 Redis，并以 TTL 表达失败观察窗口和锁定窗口；系统 MUST NOT 为该状态新增数据库表、用户状态字段或后台清理任务。
+
+#### Scenario: 连续失败达到阈值后锁定
+
+- **WHEN** 登录锁定启用，且同一规范化用户名在失败观察窗口内因用户不存在或密码不匹配累计达到 `auth.login_lockout.max_failures`
+- **THEN** 系统 MUST 拒绝本次及锁定窗口内后续密码登录
+- **AND** 锁定响应 MUST 使用 `403 Forbidden`、`CodeUserAccountLocked`、code `20005`、reason `user_account_locked` 和稳定中文公开文案
+- **AND** 响应 MUST NOT 包含失败次数、剩余锁定时间、用户是否存在、Redis key 或内部错误文本
+
+#### Scenario: 锁定前失败保持统一凭据错误
+
+- **WHEN** 同一规范化用户名的连续失败次数尚未达到阈值
+- **THEN** 用户不存在和密码不匹配 MUST 继续返回统一无效凭据
+- **AND** 系统 MUST NOT 通过状态码、错误码、文案或响应时序差异公开当前失败次数
+
+#### Scenario: 成功登录清除失败计数
+
+- **WHEN** 用户名未被锁定且密码登录成功
+- **THEN** 系统 MUST 在签发 token 前删除该规范化用户名的失败计数
+- **AND** 删除失败时 MUST NOT 签发 token，并 MUST 返回可分类的服务不可用错误
+
+#### Scenario: 锁定到期后恢复登录
+
+- **WHEN** 锁定 TTL 到期后，调用方使用正确密码登录
+- **THEN** 系统 MUST 按未锁定状态继续既有登录流程
+- **AND** 系统 MUST NOT 依赖后台任务删除过期锁定 key
+
+#### Scenario: 非爆破失败不计入锁定
+
+- **WHEN** 登录失败原因为请求校验失败、用户状态拒绝、强制改密会话创建失败或非凭据类存储故障
+- **THEN** 系统 MUST NOT 增加该用户名的登录失败计数
+- **AND** 原有错误语义 MUST 保持不变
+
+#### Scenario: Redis 不可用时登录锁定失败关闭
+
+- **WHEN** 登录锁定启用，且 Redis 不能完成锁定状态读取、失败计数更新或成功清零
+- **THEN** 系统 MUST 在密码校验后、token 签发前拒绝登录
+- **AND** 系统 MUST 返回 `503 Service Unavailable`，MUST NOT 把 Redis 故障当作未锁定或登录成功
+
+#### Scenario: 登录锁定配置边界
+
+- **WHEN** `auth.login_lockout` 未配置
+- **THEN** 系统 MUST 默认启用，并使用 5 次失败阈值、15 分钟失败观察窗口和 15 分钟锁定时长
+- **WHEN** 登录锁定启用但阈值、失败观察窗口或锁定时长不是正数
+- **THEN** 配置校验 MUST 在启动前失败，并报告对应配置字段路径
+- **WHEN** 登录锁定禁用
+- **THEN** 系统 MUST NOT 读写登录失败计数，密码登录 MUST 保持既有凭据校验语义
+
+### Requirement: 单会话 Access Token 即时吊销
+
+系统 MUST 在退出当前会话时撤销当前 refresh session，并将当前 access token 的 `jti` 写入 Redis 拒绝名单。拒绝名单 TTL MUST 等于该 access token 的剩余有效期，且 MUST 小于或等于 access token 的配置有效期。受保护访问 MUST 在签名、subject、过期和 token version 校验通过后、RBAC 授权前检查该拒绝名单。系统 MUST NOT 为单会话登出递增 `token_version`。
+
+#### Scenario: 当前会话登出后立即拒绝旧 Access Token
+
+- **WHEN** 已认证用户成功退出当前会话，并在 access token 剩余有效期内用同一 access token 访问受保护接口
+- **THEN** 系统 MUST 拒绝该请求并返回统一 token invalid 响应
+- **AND** 系统 MUST NOT 递增该用户的 `token_version`
+- **AND** 其他未退出会话的 access token MUST 保持可用
+
+#### Scenario: 拒绝名单到期后不再拦截
+
+- **WHEN** 被吊销 access token 的剩余有效期已过
+- **THEN** 系统 MUST NOT 为该过期 token 保留拒绝名单记录
+- **AND** 后续请求 MUST 先按既有 token expired 语义拒绝，MUST NOT 依赖拒绝名单表达过期
+
+#### Scenario: 登出写入拒绝名单失败
+
+- **WHEN** 当前 refresh session 已删除或不存在，但 Redis 拒绝名单写入失败
+- **THEN** 系统 MUST 返回 `503 Service Unavailable` 和 `authdomain.ErrSessionRevocationIncomplete`
+- **AND** 重复退出当前会话 MUST 继续尝试补写同一 `jti` 的拒绝名单
+- **AND** 系统 MUST NOT 返回普通登出成功
+
+#### Scenario: 拒绝名单检查失败关闭
+
+- **WHEN** access token 已通过签名、subject、过期和 token version 校验，但 Redis 拒绝名单读取失败
+- **THEN** 系统 MUST 拒绝受保护访问并返回 `503 Service Unavailable`
+- **AND** 系统 MUST NOT 将读取失败视为未吊销或认证成功
+
+#### Scenario: 拒绝名单不记录敏感材料
+
+- **WHEN** 系统写入、查询或记录 access token 拒绝名单
+- **THEN** Redis value、日志、metrics 和错误响应 MUST NOT 包含原始 access token、原始 `jti`、session ID、密码或完整 Redis key
+- **AND** 拒绝名单 key MUST 使用不可逆 `jti` 摘要，TTL MUST NOT 超过该 access token 剩余有效期
 

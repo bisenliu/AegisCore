@@ -64,6 +64,15 @@ auth:
   refresh_token_rotation: true
   # 单用户最大活跃 refresh session 数；0 表示不裁剪旧 session。
   max_active_sessions_per_user: 5
+  login_lockout:
+    # 按规范化用户名锁定连续密码失败，不替代 api_rate_limit.anonymous 的客户端 IP 限流。
+    enabled: true
+    # 同一用户名在 failure_window 内累计达到该次数后锁定。
+    max_failures: 5
+    # 未达到阈值时失败计数的观察窗口；窗口到期后计数失效。
+    failure_window: 15m
+    # 达到阈值后拒绝该用户名密码登录的时长。
+    lockout_ttl: 15m
 
 rbac:
   user_role_cache:

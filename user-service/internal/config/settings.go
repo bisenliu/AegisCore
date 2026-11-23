@@ -14,6 +14,7 @@ type AuthSettings struct {
 	TokenVersionCacheTTL     time.Duration
 	RefreshTokenRotation     bool
 	MaxActiveSessionsPerUser int
+	LoginLockout             LoginLockoutConfig
 }
 
 // RBACSettings 是 permission/RBAC 构造运行时组件所需的最小配置视图。
@@ -59,6 +60,7 @@ func NewAuthSettings(cfg *Config) AuthSettings {
 		TokenVersionCacheTTL:     cfg.Auth.TokenVersionCacheTTL,
 		RefreshTokenRotation:     cfg.Auth.RefreshTokenRotation,
 		MaxActiveSessionsPerUser: cfg.Auth.MaxActiveSessionsPerUser,
+		LoginLockout:             cfg.Auth.LoginLockout,
 	}
 }
 

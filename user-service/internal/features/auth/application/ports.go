@@ -37,6 +37,26 @@ type RefreshSessionStore interface {
 	DeleteAllUserSessions(ctx context.Context, userID uuid.UUID) error
 }
 
+// LoginLockoutStatus 表示某个规范化用户名当前是否被临时锁定。
+type LoginLockoutStatus struct {
+	Locked bool
+}
+
+// AccessTokenDenylist 管理已退出当前会话的 access token 拒绝名单。
+// 它只覆盖不递增 token version 的当前 access token，不替代全量会话撤销。
+type AccessTokenDenylist interface {
+	DenyAccessToken(ctx context.Context, tokenID string, ttl time.Duration) error
+	AccessTokenDenied(ctx context.Context, tokenID string) (bool, error)
+}
+
+// LoginLockoutStore 管理账号维度的连续登录失败计数。
+// 计数按规范化用户名隔离，不使用客户端 IP，也不替代接口限流。
+type LoginLockoutStore interface {
+	LoginLockoutStatus(ctx context.Context, username string) (LoginLockoutStatus, error)
+	RegisterLoginFailure(ctx context.Context, username string, maxFailures int, failureWindow time.Duration, lockoutTTL time.Duration) (LoginLockoutStatus, error)
+	ClearLoginFailures(ctx context.Context, username string) error
+}
+
 // PasswordChangeSessionStore 管理强制改密一次性会话生命周期。
 type PasswordChangeSessionStore interface {
 	CreatePasswordChangeSession(ctx context.Context, session authdomain.PasswordChangeSession, ttl time.Duration) error

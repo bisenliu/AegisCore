@@ -48,6 +48,12 @@ const (
 	DefaultUserRoleCacheTTL = 5 * time.Second
 	// DefaultTokenVersionCacheTTL 是令牌版本号本地缓存的默认过期时长。
 	DefaultTokenVersionCacheTTL = time.Second
+	// DefaultLoginLockoutMaxFailures 是同一用户名连续密码失败后锁定的默认次数。
+	DefaultLoginLockoutMaxFailures = 5
+	// DefaultLoginLockoutFailureWindow 是连续密码失败计数的默认观察窗口。
+	DefaultLoginLockoutFailureWindow = 15 * time.Minute
+	// DefaultLoginLockoutTTL 是达到失败阈值后拒绝该用户名登录的默认时长。
+	DefaultLoginLockoutTTL = 15 * time.Minute
 )
 
 var sensitiveConfigPaths = []string{
@@ -157,6 +163,40 @@ type AuthConfig struct {
 	TokenVersionCacheTTL     time.Duration      `mapstructure:"token_version_cache_ttl"`
 	RefreshTokenRotation     bool               `mapstructure:"refresh_token_rotation"`
 	MaxActiveSessionsPerUser int                `mapstructure:"max_active_sessions_per_user"`
+	LoginLockout             LoginLockoutConfig `mapstructure:"login_lockout"`
+}
+
+// LoginLockoutConfig 控制同一用户名连续密码失败后的临时锁定。
+// 它按用户名计数，不替代按客户端 IP 的匿名限流。
+type LoginLockoutConfig struct {
+	Enabled       bool          `mapstructure:"enabled"`
+	MaxFailures   int           `mapstructure:"max_failures"`
+	FailureWindow time.Duration `mapstructure:"failure_window"`
+	LockoutTTL    time.Duration `mapstructure:"lockout_ttl"`
+}
+
+// DefaultLoginLockoutConfig 返回启用状态下的登录锁定默认配置。
+func DefaultLoginLockoutConfig() LoginLockoutConfig {
+	return LoginLockoutConfig{
+		Enabled:       true,
+		MaxFailures:   DefaultLoginLockoutMaxFailures,
+		FailureWindow: DefaultLoginLockoutFailureWindow,
+		LockoutTTL:    DefaultLoginLockoutTTL,
+	}
+}
+
+// Validate 校验启用的登录锁定策略；禁用时其余字段不参与运行时判定。
+func (c LoginLockoutConfig) Validate(path string) []error {
+	if !c.Enabled {
+		return nil
+	}
+	var errs []error
+	if c.MaxFailures <= 0 {
+		errs = append(errs, platformconfig.FieldError(path+".max_failures", "must be > 0 when enabled"))
+	}
+	errs = append(errs, platformconfig.ValidatePositiveDuration(path+".failure_window", c.FailureWindow)...)
+	errs = append(errs, platformconfig.ValidatePositiveDuration(path+".lockout_ttl", c.LockoutTTL)...)
+	return errs
 }
 
 // RBACConfig 包含 user-service RBAC 热路径的服务私有设置。
@@ -378,6 +418,7 @@ func DefaultConfig() Config {
 		Auth: AuthConfig{
 			// 默认接受 logout-all 和改密在正常 Redis 更新成功后最多 1 秒的跨副本撤销收敛窗口。
 			TokenVersionCache: DefaultFeatureCacheConfig(DefaultTokenVersionCacheTTL),
+			LoginLockout:      DefaultLoginLockoutConfig(),
 		},
 		RBAC: RBACConfig{
 			UserRoleCache: DefaultFeatureCacheConfig(DefaultUserRoleCacheTTL),
@@ -481,6 +522,7 @@ func (c Config) validateAuth() []error {
 	errs = append(errs, platformconfig.ValidatePositiveDuration("auth.jwt.refresh_token_ttl", c.Auth.JWT.RefreshTokenTTL)...)
 	errs = append(errs, platformconfig.ValidateNonNegativeInt("auth.max_active_sessions_per_user", c.Auth.MaxActiveSessionsPerUser)...)
 	errs = append(errs, c.Auth.TokenVersionCache.Validate("auth.token_version_cache")...)
+	errs = append(errs, c.Auth.LoginLockout.Validate("auth.login_lockout")...)
 	return errs
 }
 

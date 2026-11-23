@@ -14,6 +14,10 @@ const (
 
 	// 认证与登录类。
 	InvalidCredentials = "用户名或密码不正确，请检查后重试" // #nosec G101 -- 用户提示文案，不包含真实凭据。
+	// LoginTemporarilyLocked 是连续密码失败后临时拒绝登录的提示语。
+	LoginTemporarilyLocked = "登录尝试过于频繁，请稍后再试"
+	// LoginTemporarilyUnavailable 是登录安全检查暂时无法完成时的提示语。
+	LoginTemporarilyUnavailable = "登录服务暂时不可用，请稍后重试"
 	// AuthRevocationIncomplete 退出登录操作由于网络延迟尚未完全生效时的安全提示语。
 	AuthRevocationIncomplete = "退出登录尚未完全生效，请稍后重试"
 	// PasswordChangeRequired 用户首次登录或重置后被要求必须修改密码时的提示语。

@@ -60,6 +60,8 @@ var (
 	_ authapplication.TokenVersionCache          = (*SessionStore)(nil)
 	_ authapplication.RefreshSessionStore        = (*SessionStore)(nil)
 	_ authapplication.PasswordChangeSessionStore = (*SessionStore)(nil)
+	_ authapplication.LoginLockoutStore          = (*SessionStore)(nil)
+	_ authapplication.AccessTokenDenylist        = (*SessionStore)(nil)
 )
 
 // PurgeTaskPool 是认证 Redis 适配器消费的后台清理任务池窄接口。

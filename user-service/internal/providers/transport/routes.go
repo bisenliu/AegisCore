@@ -9,6 +9,7 @@ import (
 	"github.com/aegiscore/platform/runtime/config"
 	platformmetrics "github.com/aegiscore/platform/runtime/observability/metrics"
 	platformauth "github.com/aegiscore/platform/security/auth"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
@@ -21,19 +22,20 @@ import (
 type RegisterRouteParams struct {
 	fx.In
 
-	Config        *config.Config
-	Log           *zap.Logger
-	Engine        *gin.Engine
-	JWT           platformauth.AccessTokenVerifier
-	Health        router.HealthChecks
-	Metrics       *platformmetrics.Provider
-	RateLimiters  *APIRateLimiters
-	TokenVersions platformauth.TokenVersionValidator
-	Authorizer    permissionauthorization.Authorizer
-	Auth          *authhttp.AuthController
-	Permission    *permissionhttp.PermissionController
-	Role          *rolehttp.RoleController
-	User          *userhttp.UserController
+	Config         *config.Config
+	Log            *zap.Logger
+	Engine         *gin.Engine
+	JWT            platformauth.AccessTokenVerifier
+	Health         router.HealthChecks
+	Metrics        *platformmetrics.Provider
+	RateLimiters   *APIRateLimiters
+	TokenVersions  platformauth.TokenVersionValidator
+	AccessDenylist authapplication.AccessTokenDenylist
+	Authorizer     permissionauthorization.Authorizer
+	Auth           *authhttp.AuthController
+	Permission     *permissionhttp.PermissionController
+	Role           *rolehttp.RoleController
+	User           *userhttp.UserController
 }
 
 // RegisterRoutes 将服务级 provider 依赖适配为 router 层路由注册参数。
@@ -55,6 +57,7 @@ func RegisterRoutes(params RegisterRouteParams) error {
 		AnonymousRateLimiter:  anonymousLimiter,
 		UserRateLimiter:       userLimiter,
 		TokenVersionValidator: params.TokenVersions,
+		AccessDenylist:        params.AccessDenylist,
 		Authorizer:            params.Authorizer,
 		Auth:                  params.Auth,
 		Permission:            params.Permission,

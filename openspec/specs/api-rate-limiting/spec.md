@@ -3,9 +3,7 @@
 ## Purpose
 
 定义 user-service 的本地 API 限流能力，约束匿名与已认证请求的限流身份、中间件顺序、错误响应、配置和单实例运行边界。
-
 ## Requirements
-
 ### Requirement: API 限流身份与中间件门禁
 
 系统 MUST 对公开认证入口按可信客户端 IP 限流，对已认证接口按 User ID 限流。匿名限流 MUST 在 auth controller 前执行；User ID 限流 MUST 在 JWT 与 token version 校验通过后、RBAC 授权和 controller 前执行。超限响应 MUST 使用统一错误 envelope 返回 `429 Too Many Requests`。
@@ -88,3 +86,27 @@ user-service MUST 私有声明匿名与已认证限流策略，并使用共享�
 - **WHEN** 系统记录当前 Key 数、容量耗尽、overflow、拒绝或驱逐相关日志与 metrics
 - **THEN** 观测标签 MUST 只使用固定 scope、event、reason 或 key_present 等低基数字段
 - **AND** 观测数据 MUST NOT 使用原始客户端 IP、User ID、token、用户名或请求体字段作为标签值
+
+### Requirement: 登录锁定与 IP 限流边界
+
+系统 MUST 将账号维度登录锁定视为认证安全控制，而不是 API 限流配额。公开认证入口的客户端 IP 限流和登录锁定 MUST 可以同时生效，且 MUST NOT 互相替代。IP 限流 MUST 继续在 auth controller 前执行；登录锁定 MUST 在 auth application 的密码登录流程中执行。
+
+#### Scenario: IP 限流先于登录锁定
+
+- **WHEN** 同一客户端 IP 已超过匿名认证限流阈值，即使用户名尚未达到登录锁定阈值
+- **THEN** 系统 MUST 在 auth controller 前返回统一 `429 Too Many Requests`
+- **AND** 系统 MUST NOT 读取或更新该用户名的登录失败计数
+
+#### Scenario: 代理池不能绕过登录锁定
+
+- **WHEN** 不同客户端 IP 均未超过匿名认证限流阈值，但同一规范化用户名已达到登录锁定阈值
+- **THEN** 系统 MUST 拒绝密码登录并返回登录锁定错误
+- **AND** 匿名 IP 限流配置、本地 limiter 状态和 `429` 语义 MUST 保持不变
+
+#### Scenario: 限流观测不混入登录锁定
+
+- **WHEN** 系统记录 IP 限流或登录锁定的日志和 metrics
+- **THEN** 限流指标 MUST 继续只使用固定 scope、event、reason 或 key_present 等低基数标签
+- **AND** 登录锁定指标 MUST 使用独立的低基数结果标签，MUST NOT 复用限流 event 表达账号锁定
+- **AND** 两类观测 MUST NOT 使用原始客户端 IP、用户名、失败次数、token 或 `jti` 作为标签值
+

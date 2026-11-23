@@ -30,6 +30,10 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, 35*time.Second, cfg.RBAC.PolicyWatcher.MaxStaleness)
 	require.True(t, cfg.Auth.RefreshTokenRotation)
 	require.Equal(t, 5, cfg.Auth.MaxActiveSessionsPerUser)
+	require.True(t, cfg.Auth.LoginLockout.Enabled)
+	require.Equal(t, 4, cfg.Auth.LoginLockout.MaxFailures)
+	require.Equal(t, 10*time.Minute, cfg.Auth.LoginLockout.FailureWindow)
+	require.Equal(t, 20*time.Minute, cfg.Auth.LoginLockout.LockoutTTL)
 	require.True(t, cfg.APIRateLimit.Anonymous.Enabled)
 	require.Equal(t, 2.5, cfg.APIRateLimit.Anonymous.RatePerSecond)
 	require.Equal(t, 7, cfg.APIRateLimit.Anonymous.Burst)
@@ -82,6 +86,7 @@ func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
 	require.Equal(t, platformresources.DefaultPostgresConnMaxLifetime, postgres.Pool.ConnMaxLifetime)
 	require.Equal(t, platformresources.DefaultPostgresConnMaxIdleTime, postgres.Pool.ConnMaxIdleTime)
 	require.Equal(t, DefaultFeatureCacheConfig(time.Second), cfg.Auth.TokenVersionCache)
+	require.Equal(t, DefaultLoginLockoutConfig(), cfg.Auth.LoginLockout)
 	require.Equal(t, DefaultFeatureCacheConfig(5*time.Second), cfg.RBAC.UserRoleCache)
 	require.Equal(t, DefaultPolicyWatcherConfig(), cfg.RBAC.PolicyWatcher)
 	require.Equal(t, DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, AnonymousRateLimitShards*1024), cfg.APIRateLimit.Anonymous)
@@ -293,6 +298,22 @@ func TestLoadPreservesDisabledAPIRateLimit(t *testing.T) {
 	require.Equal(t, 1.0, cfg.APIRateLimit.Anonymous.RatePerSecond)
 	require.False(t, cfg.APIRateLimit.Authenticated.Enabled)
 	require.Equal(t, 5.0, cfg.APIRateLimit.Authenticated.RatePerSecond)
+}
+
+// TestValidateLoginLockout 验证登录锁定启用时必须有正数阈值，禁用时不参与判定。
+func TestValidateLoginLockout(t *testing.T) {
+	t.Run("enabled requires positive values", func(t *testing.T) {
+		errs := (LoginLockoutConfig{Enabled: true}).Validate("auth.login_lockout")
+		require.Len(t, errs, 3)
+		require.Contains(t, errs[0].Error(), "auth.login_lockout.max_failures")
+		require.Contains(t, errs[1].Error(), "auth.login_lockout.failure_window")
+		require.Contains(t, errs[2].Error(), "auth.login_lockout.lockout_ttl")
+	})
+
+	t.Run("disabled allows zero values", func(t *testing.T) {
+		errs := (LoginLockoutConfig{Enabled: false}).Validate("auth.login_lockout")
+		require.Empty(t, errs)
+	})
 }
 
 // TestValidateAPIRateLimit 验证启用限流策略时的速率、burst 和清理配置边界。
@@ -731,6 +752,11 @@ auth:
   token_version_cache_ttl: 30s
   refresh_token_rotation: true
   max_active_sessions_per_user: 5
+  login_lockout:
+    enabled: true
+    max_failures: 4
+    failure_window: 10m
+    lockout_ttl: 20m
 api_rate_limit:
   anonymous:
     enabled: true

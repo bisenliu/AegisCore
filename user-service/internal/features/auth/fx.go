@@ -60,6 +60,8 @@ var authInfrastructureOptions = fx.Options(
 			fx.As(new(authapplication.TokenVersionCache)),
 			fx.As(new(authapplication.RefreshSessionStore)),
 			fx.As(new(authapplication.PasswordChangeSessionStore)),
+			fx.As(new(authapplication.LoginLockoutStore)),
+			fx.As(new(authapplication.AccessTokenDenylist)),
 		),
 	),
 )
@@ -82,10 +84,10 @@ var authApplicationOptions = fx.Options(
 		authtokens.NewAccessTokenVerifier,
 		newAuthSessionLifecycle,
 		newRefreshTokenSettings,
-		authcommand.NewLoginUseCase,
+		newLoginUseCase,
 		authcommand.NewRefreshTokenUseCase,
 		authcommand.NewForceChangePasswordUseCase,
-		authcommand.NewLogoutCurrentSessionUseCase,
+		newLogoutCurrentSessionUseCase,
 		authcommand.NewLogoutAllSessionsUseCase,
 	),
 )
@@ -249,6 +251,16 @@ func newTokenVersionLocalCache(params TokenVersionLocalCacheParams) (TokenVersio
 }
 
 // Provider：应用服务
+
+// newLogoutCurrentSessionUseCase 组装当前会话登出，并要求同时撤销 refresh session 和当前 access token。
+func newLogoutCurrentSessionUseCase(sessions authsessions.Lifecycle, denylist authapplication.AccessTokenDenylist, settings serviceconfig.AuthSettings, metrics authapplication.Metrics) authcommand.LogoutCurrentSessionUseCase {
+	return authcommand.NewLogoutCurrentSessionUseCase(sessions, authredis.NewBoundedAccessTokenDenylist(denylist, settings.JWT.AccessTokenTTL), metrics)
+}
+
+// newLoginUseCase 组装密码登录流程，并把账号锁定阈值从认证配置传给业务层。
+func newLoginUseCase(credentials authcredentials.Verifier, tokens authtokens.Issuer, sessions authsessions.Lifecycle, lockout authapplication.LoginLockoutStore, settings serviceconfig.AuthSettings, metrics authapplication.Metrics) (authcommand.LoginUseCase, error) {
+	return authcommand.NewLoginUseCase(credentials, tokens, sessions, lockout, settings.LoginLockout, metrics)
+}
 
 // newAuthSessionLifecycle 组装用户会话的完整生命周期管理（包括创建、续期、单用户同时在线上限控制及退出作废）。
 func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, tokenVersionCache authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, tokenVersions authvalidators.TokenVersionLocalInvalidator, settings serviceconfig.AuthSettings) (authsessions.Lifecycle, error) {

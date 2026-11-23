@@ -11,7 +11,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	platformauth "github.com/aegiscore/platform/security/auth"
-	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
@@ -163,13 +162,15 @@ func TestAuthUseCaseLoginPassesMaxActiveSessionsPerUser(t *testing.T) {
 	tokenVersions := NewMockTokenVersionCache(ctrl)
 	sessions := NewMockRefreshSessionStore(ctrl)
 	passwordChanges := NewMockPasswordChangeSessionStore(ctrl)
-	cfg := serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: true, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 3}
+	cfg := defaultAuthConfig(true)
+	cfg.MaxActiveSessionsPerUser = 3
 	lifecycle, err := authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, cfg.MaxActiveSessionsPerUser, noopTokenVersionInvalidator{})
 	require.NoError(t, err)
-	svc := NewLoginUseCase(credentials, tokens, lifecycle, nil)
 
 	credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(normalCredential(), nil)
 	tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", 900, time.Hour), nil)
+	svc, err := NewLoginUseCase(credentials, tokens, lifecycle, &stubLoginLockout{}, cfg.LoginLockout, nil)
+	require.NoError(t, err)
 	sessions.EXPECT().CreateSession(gomock.Any(), gomock.Any(), time.Hour, 3).DoAndReturn(func(_ context.Context, session authdomain.AuthSession, _ time.Duration, _ int) error {
 		require.False(t, session.UserID != authTestUserID || session.SessionID == "" || session.TokenVersion != 2,
 			"session = %#v", session)
@@ -207,6 +208,82 @@ func TestAuthUseCaseLoginRejectsInvalidCredentials(t *testing.T) {
 	require.ErrorIs(t, err, authdomain.ErrInvalidCredentials,
 		"err = %v, want authdomain.ErrInvalidCredentials", err)
 
+}
+
+func TestAuthUseCaseLoginLockout(t *testing.T) {
+	t.Run("locks on fifth credential failure", func(t *testing.T) {
+		fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
+		fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "wrong").Return(nil, authdomain.ErrInvalidCredentials).Times(5)
+
+		for range 4 {
+			_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "wrong"})
+			require.ErrorIs(t, err, authdomain.ErrInvalidCredentials)
+		}
+		_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "wrong"})
+		require.ErrorIs(t, err, authdomain.ErrLoginLocked)
+		require.Equal(t, 5, fixture.lockout.registered)
+	})
+
+	t.Run("locked username rejects before password verification", func(t *testing.T) {
+		fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
+		fixture.lockout.locked = true
+
+		_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+		require.ErrorIs(t, err, authdomain.ErrLoginLocked)
+		require.Equal(t, 1, fixture.lockout.statusLookups)
+		require.Zero(t, fixture.lockout.registered)
+		require.False(t, fixture.lockout.cleared)
+	})
+
+	t.Run("status rejection does not count", func(t *testing.T) {
+		fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
+		fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(nil, errors.Join(authdomain.ErrInvalidCredentials, authdomain.ErrUserStatusRejected))
+
+		_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+		require.ErrorIs(t, err, authdomain.ErrInvalidCredentials)
+		require.Zero(t, fixture.lockout.registered)
+	})
+
+	t.Run("redis status failure fails closed before password verification", func(t *testing.T) {
+		fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
+		fixture.lockout.statusErr = errors.New("redis unavailable")
+
+		_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+		require.ErrorIs(t, err, authdomain.ErrLoginLockoutUnavailable)
+	})
+
+	t.Run("disabled lockout does not touch the counter", func(t *testing.T) {
+		cfg := defaultAuthConfig(true)
+		cfg.LoginLockout.Enabled = false
+		fixture := newAuthCommandFixture(t, cfg, nil)
+		fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "wrong").Return(nil, authdomain.ErrInvalidCredentials)
+
+		_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "wrong"})
+		require.ErrorIs(t, err, authdomain.ErrInvalidCredentials)
+		require.Zero(t, fixture.lockout.statusLookups)
+		require.Zero(t, fixture.lockout.registered)
+	})
+
+	t.Run("clear failure blocks token issue", func(t *testing.T) {
+		fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
+		fixture.lockout.clearErr = errors.New("redis unavailable")
+		fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(normalCredential(), nil)
+
+		result, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+		require.ErrorIs(t, err, authdomain.ErrLoginLockoutUnavailable)
+		require.Nil(t, result)
+	})
+
+	t.Run("success clears failures before issuing token", func(t *testing.T) {
+		fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
+		fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(normalCredential(), nil)
+		fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", 900, time.Hour), nil)
+		fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID, gomock.Any(), int64(2), time.Hour).Return(nil)
+
+		_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+		require.NoError(t, err)
+		require.True(t, fixture.lockout.cleared)
+	})
 }
 
 func TestAuthUseCaseLoginRejectsInactiveStatuses(t *testing.T) {

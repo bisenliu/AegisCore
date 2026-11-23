@@ -56,3 +56,15 @@ func (c KeyCatalog) AuthUserSessions(userID string) string {
 func (c KeyCatalog) AuthUserSessionsPurge(userID string, purgeID string) string {
 	return c.builder.MustKey("user", "sessions", rediskey.HashTag(userID), "purge", purgeID)
 }
+
+// AuthAccessDenylist 返回已吊销 access token 的拒绝名单 key。
+// digest 必须是 jti 的不可逆摘要，调用方不得传入原始 jti。
+func (c KeyCatalog) AuthAccessDenylist(digest string) string {
+	return c.builder.MustKey("access_denylist", digest)
+}
+
+// AuthLoginLockout 返回登录失败锁定记录的 key。
+// digest 必须是用户名的不可逆摘要，调用方不得传入原始用户名。
+func (c KeyCatalog) AuthLoginLockout(digest string) string {
+	return c.builder.MustKey("login_lockout", digest)
+}

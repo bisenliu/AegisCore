@@ -247,5 +247,9 @@ func (v testAccessTokenVerifier) VerifyAccessToken(tokenString string) (auth.Acc
 	if token == nil || !token.Valid || claims.Subject != "access" || claims.TokenVersion <= 0 || claims.SessionID == "" {
 		return auth.AccessToken{}, jwtv5.ErrTokenInvalidClaims
 	}
-	return auth.AccessToken{UserID: claims.UserID, SessionID: claims.SessionID, TokenVersion: claims.TokenVersion}, nil
+	expiresAt := time.Time{}
+	if claims.ExpiresAt != nil {
+		expiresAt = claims.ExpiresAt.Time
+	}
+	return auth.AccessToken{ID: claims.ID, UserID: claims.UserID, SessionID: claims.SessionID, TokenVersion: claims.TokenVersion, ExpiresAt: expiresAt}, nil
 }
